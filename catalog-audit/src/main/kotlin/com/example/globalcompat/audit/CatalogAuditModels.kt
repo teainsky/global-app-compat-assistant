@@ -14,6 +14,9 @@ data class GitHubReleaseMetadata(
     val releaseUrl: String,
     val releaseNotes: String,
     val assets: List<GitHubAssetMetadata>,
+    val publishedAt: String = "",
+    val draft: Boolean = false,
+    val prerelease: Boolean = false,
 )
 
 data class GitHubAssetMetadata(
@@ -69,6 +72,7 @@ data class CatalogAuditReport(
 interface GitHubReleaseClient {
     fun getRelease(releaseTag: String): GitHubReleaseMetadata
 
+    fun listReleases(): List<GitHubReleaseMetadata> = error("Release inventory is not supported")
 }
 
 interface ArtifactSourceResolver {

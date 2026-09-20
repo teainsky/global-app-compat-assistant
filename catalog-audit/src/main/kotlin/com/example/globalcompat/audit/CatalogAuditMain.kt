@@ -4,6 +4,10 @@ import java.nio.file.Path
 import kotlin.system.exitProcess
 
 fun main(args: Array<String>) {
+    if ("--inventory" in args) {
+        runInventory()
+        return
+    }
     val releaseTag = argument(args, "--release-tag")
     val outputDirectory = Path.of("build", "catalog-audit", releaseTag)
     val sdkValue = System.getenv("ANDROID_HOME")
@@ -18,6 +22,14 @@ fun main(args: Array<String>) {
     AuditReportWriter().write(report, outputDirectory)
     println("Catalog audit ${report.status}: ${outputDirectory.resolve("audit-report.json")}")
     if (report.status != AuditStatus.PASS) exitProcess(2)
+}
+
+private fun runInventory() {
+    val outputDirectory = Path.of("build", "catalog-audit", "release-inventory")
+    val report = ReleaseInventoryScanner(OfficialGitHubReleaseClient()).scan(limit = 10)
+    ReleaseInventoryReportWriter().write(report, outputDirectory)
+    println("Release inventory: ${outputDirectory.resolve("inventory-report.json")}")
+    if (report.latestCompleteHuaweiPair == null) exitProcess(2)
 }
 
 private fun argument(args: Array<String>, name: String): String {

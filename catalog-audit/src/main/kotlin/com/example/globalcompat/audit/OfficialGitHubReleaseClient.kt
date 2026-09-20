@@ -26,11 +26,37 @@ class OfficialGitHubReleaseClient(
         check(response.statusCode() == 200) {
             "GitHub release API returned HTTP ${response.statusCode()}"
         }
-        val root = JsonParser.parseString(response.body()).asJsonObject
-        return GitHubReleaseMetadata(
+        return parseRelease(JsonParser.parseString(response.body()).asJsonObject)
+    }
+
+    override fun listReleases(): List<GitHubReleaseMetadata> {
+        val uri = URI.create("https://api.github.com/repos/microg/GmsCore/releases?per_page=100&page=1")
+        val request = request(uri)
+        val response = httpClient.send(request, HttpResponse.BodyHandlers.ofString())
+        check(response.statusCode() == 200) {
+            "GitHub releases API returned HTTP ${response.statusCode()}"
+        }
+        return JsonParser.parseString(response.body()).asJsonArray.map { element ->
+            parseRelease(element.asJsonObject)
+        }
+    }
+
+    private fun request(uri: URI): HttpRequest = HttpRequest.newBuilder(uri)
+        .header("Accept", "application/vnd.github+json")
+        .header("X-GitHub-Api-Version", "2022-11-28")
+        .header("User-Agent", "global-app-compat-assistant-catalog-audit")
+        .timeout(Duration.ofSeconds(30))
+        .GET()
+        .build()
+
+    private fun parseRelease(root: com.google.gson.JsonObject): GitHubReleaseMetadata =
+        GitHubReleaseMetadata(
             releaseTag = root.get("tag_name").asString,
             releaseUrl = root.get("html_url").asString,
             releaseNotes = root.get("body")?.takeUnless { it.isJsonNull }?.asString.orEmpty(),
+            publishedAt = root.get("published_at")?.takeUnless { it.isJsonNull }?.asString.orEmpty(),
+            draft = root.get("draft").asBoolean,
+            prerelease = root.get("prerelease").asBoolean,
             assets = root.getAsJsonArray("assets").map { element ->
                 val asset = element.asJsonObject
                 GitHubAssetMetadata(
@@ -44,6 +70,4 @@ class OfficialGitHubReleaseClient(
                 )
             },
         )
-    }
-
 }

@@ -21,3 +21,12 @@ application {
 tasks.named<JavaExec>("run") {
     workingDir = rootProject.projectDir
 }
+
+tasks.register<JavaExec>("releaseInventory") {
+    group = "verification"
+    description = "Scans the latest 10 stable official microG GitHub releases."
+    classpath = sourceSets["main"].runtimeClasspath
+    mainClass.set(application.mainClass)
+    args("--inventory")
+    workingDir = rootProject.projectDir
+}
