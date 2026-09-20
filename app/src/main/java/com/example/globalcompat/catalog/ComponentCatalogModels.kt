@@ -12,7 +12,7 @@ data class ComponentCatalog(
 data class ComponentRelease(
     val releaseId: String,
     val releaseVersion: String,
-    val status: ComponentReleaseStatus,
+    val compatibilityStatus: CompatibilityValidationStatus,
     val publishedAt: String,
     val compatibility: CompatibilityConstraint,
     val artifacts: List<ComponentArtifact>,
@@ -33,7 +33,8 @@ data class ComponentArtifact(
     val verifiedDeviceFamilies: List<String>,
     val blockedDeviceFamilies: List<String>,
     val blockedSystemVersions: List<String>,
-    val status: ComponentReleaseStatus,
+    val integrityStatus: ArtifactIntegrityStatus,
+    val compatibilityStatus: CompatibilityValidationStatus,
     val publishedAt: String,
     val license: String?,
 )
@@ -49,8 +50,10 @@ data class CompatibilityConstraint(
 
 data class VerificationPolicy(
     val allowedSourceTypes: Set<ComponentSourceType>,
-    val recommendableStatuses: Set<ComponentReleaseStatus>,
-    val newReleaseDefaultStatus: ComponentReleaseStatus,
+    val recommendableCompatibilityStatuses: Set<CompatibilityValidationStatus>,
+    val installableIntegrityStatuses: Set<ArtifactIntegrityStatus>,
+    val newReleaseDefaultCompatibilityStatus: CompatibilityValidationStatus,
+    val newArtifactDefaultCompatibilityStatus: CompatibilityValidationStatus,
     val requiredVariantByPlan: Map<CompatibilityPlanId, ComponentVariant>,
     val requireSha256ForDownloadVerification: Boolean,
     val requireSigningCertificateForDownloadVerification: Boolean,
@@ -66,9 +69,18 @@ enum class ComponentVariant {
     CUSTOM_ROM,
 }
 
-enum class ComponentReleaseStatus {
-    VERIFIED,
+enum class ArtifactIntegrityStatus {
+    UNVERIFIED,
+    SOURCE_VERIFIED,
+    HASH_VERIFIED,
+    SIGNATURE_VERIFIED,
+    FAILED,
+}
+
+enum class CompatibilityValidationStatus {
+    UNTESTED,
     CANDIDATE,
+    DEVICE_VERIFIED,
     BLOCKED,
     DEPRECATED,
 }
@@ -88,9 +100,20 @@ enum class ArtifactVerificationReadiness {
 data class ArtifactVerificationAssessment(
     val componentId: String,
     val artifactName: String,
+    val integrityStatus: ArtifactIntegrityStatus,
+    val compatibilityStatus: CompatibilityValidationStatus,
     val readiness: ArtifactVerificationReadiness,
     val isReadyForDownloadVerification: Boolean,
+    val meetsArtifactInstallationGate: Boolean,
     val missingMetadata: List<String>,
+)
+
+data class ArtifactIntegrityEvidence(
+    val sourceVerified: Boolean = false,
+    val sha256: String? = null,
+    val sha256Matches: Boolean? = null,
+    val signingCertificateDigest: String? = null,
+    val signingCertificateMatches: Boolean? = null,
 )
 
 data class CatalogMatchRequest(
@@ -106,5 +129,6 @@ data class CatalogSelection(
     val compatibleArtifacts: List<ComponentArtifact>,
     val recommendedRelease: ComponentRelease?,
     val recommendedArtifacts: List<ComponentArtifact>,
+    val installableArtifacts: List<ComponentArtifact>,
     val verificationAssessments: List<ArtifactVerificationAssessment>,
 )

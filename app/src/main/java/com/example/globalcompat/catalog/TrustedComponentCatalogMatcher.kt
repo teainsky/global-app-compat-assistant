@@ -4,8 +4,38 @@ import com.example.globalcompat.data.CompatibilityPlanId
 import com.example.globalcompat.data.DeviceCategory
 
 class TrustedComponentCatalogMatcher {
-    fun defaultStatusForNewRelease(catalog: ComponentCatalog): ComponentReleaseStatus =
-        catalog.verificationPolicy.newReleaseDefaultStatus
+    fun defaultStatusForNewRelease(catalog: ComponentCatalog): CompatibilityValidationStatus =
+        catalog.verificationPolicy.newReleaseDefaultCompatibilityStatus
+
+    fun defaultStatusForNewArtifact(catalog: ComponentCatalog): CompatibilityValidationStatus =
+        catalog.verificationPolicy.newArtifactDefaultCompatibilityStatus
+
+    fun applyIntegrityEvidence(
+        artifact: ComponentArtifact,
+        evidence: ArtifactIntegrityEvidence,
+    ): ComponentArtifact {
+        val hasSha256 = evidence.sha256 != null || artifact.sha256 != null
+        val hasSigningCertificate =
+            evidence.signingCertificateDigest != null || artifact.signingCertificateDigest != null
+        val integrityStatus = when {
+            evidence.sha256Matches == false || evidence.signingCertificateMatches == false ->
+                ArtifactIntegrityStatus.FAILED
+            evidence.sha256Matches == true &&
+                evidence.signingCertificateMatches == true &&
+                hasSha256 &&
+                hasSigningCertificate ->
+                ArtifactIntegrityStatus.SIGNATURE_VERIFIED
+            evidence.sha256Matches == true && hasSha256 -> ArtifactIntegrityStatus.HASH_VERIFIED
+            evidence.sourceVerified -> ArtifactIntegrityStatus.SOURCE_VERIFIED
+            else -> ArtifactIntegrityStatus.UNVERIFIED
+        }
+        return artifact.copy(
+            sha256 = evidence.sha256 ?: artifact.sha256,
+            signingCertificateDigest =
+                evidence.signingCertificateDigest ?: artifact.signingCertificateDigest,
+            integrityStatus = integrityStatus,
+        )
+    }
 
     fun select(
         catalog: ComponentCatalog,
@@ -16,8 +46,8 @@ class TrustedComponentCatalogMatcher {
         val policy = catalog.verificationPolicy
         val requiredVariant = policy.requiredVariantByPlan[request.planId] ?: return EMPTY_SELECTION
         val compatibleReleases = catalog.releases.filter { release ->
-            release.status != ComponentReleaseStatus.BLOCKED &&
-                release.status != ComponentReleaseStatus.DEPRECATED &&
+            release.compatibilityStatus != CompatibilityValidationStatus.BLOCKED &&
+                release.compatibilityStatus != CompatibilityValidationStatus.DEPRECATED &&
                 release.compatibility.matches(request, requiredVariant) &&
                 release.eligibleArtifacts(policy, requiredVariant, request).hasRequiredPair(request.planId)
         }
@@ -26,9 +56,9 @@ class TrustedComponentCatalogMatcher {
         }
         val recommendedRelease = compatibleReleases
             .filter { release ->
-                release.status in policy.recommendableStatuses &&
+                release.compatibilityStatus in policy.recommendableCompatibilityStatuses &&
                     release.eligibleArtifacts(policy, requiredVariant, request).all {
-                        it.status in policy.recommendableStatuses
+                        it.compatibilityStatus in policy.recommendableCompatibilityStatuses
                     }
             }
             .maxWithOrNull(
@@ -38,12 +68,20 @@ class TrustedComponentCatalogMatcher {
         val recommendedArtifacts = recommendedRelease
             ?.eligibleArtifacts(policy, requiredVariant, request)
             .orEmpty()
+        val installableArtifacts = recommendedArtifacts.takeIf { artifacts ->
+            artifacts.isNotEmpty() && artifacts.all { artifact ->
+                artifact.integrityStatus in policy.installableIntegrityStatuses &&
+                    artifact.compatibilityStatus == CompatibilityValidationStatus.DEVICE_VERIFIED &&
+                    artifact.hasRequiredIntegrityMetadata(policy)
+            }
+        }.orEmpty()
 
         return CatalogSelection(
             compatibleReleases = compatibleReleases,
             compatibleArtifacts = compatibleArtifacts,
             recommendedRelease = recommendedRelease,
             recommendedArtifacts = recommendedArtifacts,
+            installableArtifacts = installableArtifacts,
             verificationAssessments = compatibleArtifacts.map { artifact ->
                 assessVerification(policy, artifact)
             },
@@ -75,9 +113,15 @@ class TrustedComponentCatalogMatcher {
         return ArtifactVerificationAssessment(
             componentId = artifact.componentId,
             artifactName = artifact.artifactName,
+            integrityStatus = artifact.integrityStatus,
+            compatibilityStatus = artifact.compatibilityStatus,
             readiness = readiness,
             isReadyForDownloadVerification =
                 readiness == ArtifactVerificationReadiness.READY_FOR_DOWNLOAD_VERIFICATION,
+            meetsArtifactInstallationGate =
+                artifact.integrityStatus in policy.installableIntegrityStatuses &&
+                    artifact.compatibilityStatus == CompatibilityValidationStatus.DEVICE_VERIFIED &&
+                    artifact.hasRequiredIntegrityMetadata(policy),
             missingMetadata = missingMetadata,
         )
     }
@@ -105,8 +149,9 @@ class TrustedComponentCatalogMatcher {
         artifact.variant == requiredVariant &&
             artifact.artifactName.endsWith("-hw.apk") &&
             artifact.sourceType in policy.allowedSourceTypes &&
-            artifact.status != ComponentReleaseStatus.BLOCKED &&
-            artifact.status != ComponentReleaseStatus.DEPRECATED &&
+            artifact.integrityStatus != ArtifactIntegrityStatus.FAILED &&
+            artifact.compatibilityStatus != CompatibilityValidationStatus.BLOCKED &&
+            artifact.compatibilityStatus != CompatibilityValidationStatus.DEPRECATED &&
             (artifact.verifiedDeviceFamilies.isEmpty() ||
                 request.deviceFamily in artifact.verifiedDeviceFamilies) &&
             request.deviceFamily !in artifact.blockedDeviceFamilies &&
@@ -117,6 +162,11 @@ class TrustedComponentCatalogMatcher {
         if (planId != CompatibilityPlanId.HUAWEI_MICROG_COMPAT_PLAN) return isNotEmpty()
         return mapTo(mutableSetOf()) { it.componentId }.containsAll(HUAWEI_REQUIRED_COMPONENT_IDS)
     }
+
+    private fun ComponentArtifact.hasRequiredIntegrityMetadata(policy: VerificationPolicy): Boolean =
+        (!policy.requireSha256ForDownloadVerification || sha256 != null) &&
+            (!policy.requireSigningCertificateForDownloadVerification ||
+                signingCertificateDigest != null)
 
     private companion object {
         val VERSION_NUMBER = Regex("\\d+")
@@ -129,6 +179,7 @@ class TrustedComponentCatalogMatcher {
             compatibleArtifacts = emptyList(),
             recommendedRelease = null,
             recommendedArtifacts = emptyList(),
+            installableArtifacts = emptyList(),
             verificationAssessments = emptyList(),
         )
     }

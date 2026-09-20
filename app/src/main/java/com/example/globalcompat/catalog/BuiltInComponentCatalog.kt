@@ -15,7 +15,7 @@ object BuiltInComponentCatalog {
             ComponentRelease(
                 releaseId = "microg-huawei-hw-v0.3.16.252432",
                 releaseVersion = RELEASE_VERSION,
-                status = ComponentReleaseStatus.CANDIDATE,
+                compatibilityStatus = CompatibilityValidationStatus.CANDIDATE,
                 publishedAt = PUBLISHED_AT,
                 compatibility = CompatibilityConstraint(
                     requiredPlanId = CompatibilityPlanId.HUAWEI_MICROG_COMPAT_PLAN,
@@ -49,8 +49,12 @@ object BuiltInComponentCatalog {
                 ComponentSourceType.OFFICIAL_MICROG_GITHUB,
                 ComponentSourceType.OFFICIAL_HUAWEI_APPGALLERY,
             ),
-            recommendableStatuses = setOf(ComponentReleaseStatus.VERIFIED),
-            newReleaseDefaultStatus = ComponentReleaseStatus.CANDIDATE,
+            recommendableCompatibilityStatuses = setOf(
+                CompatibilityValidationStatus.DEVICE_VERIFIED,
+            ),
+            installableIntegrityStatuses = setOf(ArtifactIntegrityStatus.SIGNATURE_VERIFIED),
+            newReleaseDefaultCompatibilityStatus = CompatibilityValidationStatus.CANDIDATE,
+            newArtifactDefaultCompatibilityStatus = CompatibilityValidationStatus.UNTESTED,
             requiredVariantByPlan = mapOf(
                 CompatibilityPlanId.HUAWEI_MICROG_COMPAT_PLAN to ComponentVariant.HUAWEI_HW,
             ),
@@ -79,7 +83,8 @@ object BuiltInComponentCatalog {
         verifiedDeviceFamilies = emptyList(),
         blockedDeviceFamilies = emptyList(),
         blockedSystemVersions = emptyList(),
-        status = ComponentReleaseStatus.CANDIDATE,
+        integrityStatus = ArtifactIntegrityStatus.SOURCE_VERIFIED,
+        compatibilityStatus = CompatibilityValidationStatus.UNTESTED,
         publishedAt = PUBLISHED_AT,
         license = license,
     )

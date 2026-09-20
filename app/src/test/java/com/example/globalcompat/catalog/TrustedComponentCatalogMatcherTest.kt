@@ -25,18 +25,27 @@ class TrustedComponentCatalogMatcherTest {
         )
         assertTrue(selection.compatibleArtifacts.all { it.variant == ComponentVariant.HUAWEI_HW })
         assertTrue(selection.recommendedArtifacts.isEmpty())
+        assertTrue(selection.installableArtifacts.isEmpty())
+        assertEquals(
+            CompatibilityValidationStatus.CANDIDATE,
+            selection.compatibleReleases.single().compatibilityStatus,
+        )
+        assertTrue(selection.compatibleArtifacts.all {
+            it.compatibilityStatus == CompatibilityValidationStatus.UNTESTED &&
+                it.integrityStatus == ArtifactIntegrityStatus.SOURCE_VERIFIED
+        })
     }
 
     @Test
     fun `Huawei plan cannot match ordinary custom ROM microG artifacts`() {
         val customRomRelease = candidateRelease().copy(
             releaseId = "custom-rom-build",
-            status = ComponentReleaseStatus.VERIFIED,
+            compatibilityStatus = CompatibilityValidationStatus.DEVICE_VERIFIED,
             artifacts = candidateRelease().artifacts.map { artifact ->
                 artifact.copy(
                     artifactName = artifact.artifactName.replace("-hw.apk", ".apk"),
                     variant = ComponentVariant.CUSTOM_ROM,
-                    status = ComponentReleaseStatus.VERIFIED,
+                    compatibilityStatus = CompatibilityValidationStatus.DEVICE_VERIFIED,
                 )
             },
         )
@@ -71,10 +80,21 @@ class TrustedComponentCatalogMatcherTest {
 
         val selection = matcher.select(catalog, huaweiRequest())
 
-        assertEquals(ComponentReleaseStatus.CANDIDATE, matcher.defaultStatusForNewRelease(catalog))
+        assertEquals(
+            CompatibilityValidationStatus.CANDIDATE,
+            matcher.defaultStatusForNewRelease(catalog),
+        )
+        assertEquals(
+            CompatibilityValidationStatus.UNTESTED,
+            matcher.defaultStatusForNewArtifact(catalog),
+        )
         assertEquals(verified.releaseId, selection.recommendedRelease?.releaseId)
-        assertTrue(selection.recommendedArtifacts.all { it.status == ComponentReleaseStatus.VERIFIED })
-        assertTrue(selection.compatibleReleases.any { it.status == ComponentReleaseStatus.CANDIDATE })
+        assertTrue(selection.recommendedArtifacts.all {
+            it.compatibilityStatus == CompatibilityValidationStatus.DEVICE_VERIFIED
+        })
+        assertTrue(selection.compatibleReleases.any {
+            it.compatibilityStatus == CompatibilityValidationStatus.CANDIDATE
+        })
     }
 
     @Test
@@ -82,9 +102,9 @@ class TrustedComponentCatalogMatcherTest {
         val verified = verifiedRelease()
         val blocked = candidateRelease().copy(
             releaseId = "blocked-newer-release",
-            status = ComponentReleaseStatus.BLOCKED,
+            compatibilityStatus = CompatibilityValidationStatus.BLOCKED,
             artifacts = candidateRelease().artifacts.map {
-                it.copy(status = ComponentReleaseStatus.BLOCKED)
+                it.copy(compatibilityStatus = CompatibilityValidationStatus.BLOCKED)
             },
         )
         val catalog = builtIn.copy(releases = listOf(verified, blocked))
@@ -106,6 +126,7 @@ class TrustedComponentCatalogMatcherTest {
                 ArtifactVerificationReadiness.NOT_READY_MISSING_INTEGRITY_METADATA
         })
         assertTrue(selection.verificationAssessments.all { !it.isReadyForDownloadVerification })
+        assertTrue(selection.verificationAssessments.all { !it.meetsArtifactInstallationGate })
         assertTrue(selection.verificationAssessments.all {
             it.missingMetadata == listOf("sha256", "signingCertificateDigest")
         })
@@ -151,12 +172,63 @@ class TrustedComponentCatalogMatcherTest {
         )
     }
 
+    @Test
+    fun `hash and signature verification changes integrity only`() {
+        val candidate = candidateRelease().artifacts.first()
+
+        val verifiedIntegrity = matcher.applyIntegrityEvidence(
+            candidate,
+            ArtifactIntegrityEvidence(
+                sourceVerified = true,
+                sha256 = "trusted-sha256",
+                sha256Matches = true,
+                signingCertificateDigest = "trusted-signing-certificate",
+                signingCertificateMatches = true,
+            ),
+        )
+
+        assertEquals(ArtifactIntegrityStatus.SIGNATURE_VERIFIED, verifiedIntegrity.integrityStatus)
+        assertEquals(
+            CompatibilityValidationStatus.UNTESTED,
+            verifiedIntegrity.compatibilityStatus,
+        )
+    }
+
+    @Test
+    fun `automatic installation requires integrity and device compatibility together`() {
+        val deviceVerifiedWithoutIntegrity = verifiedRelease().copy(
+            artifacts = verifiedRelease().artifacts.map {
+                it.copy(integrityStatus = ArtifactIntegrityStatus.SOURCE_VERIFIED)
+            },
+        )
+        val withoutIntegrity = matcher.select(
+            builtIn.copy(releases = listOf(deviceVerifiedWithoutIntegrity)),
+            huaweiRequest(),
+        )
+
+        assertFalse(withoutIntegrity.recommendedArtifacts.isEmpty())
+        assertTrue(withoutIntegrity.installableArtifacts.isEmpty())
+
+        val fullyEligible = deviceVerifiedWithoutIntegrity.copy(
+            artifacts = deviceVerifiedWithoutIntegrity.artifacts.map {
+                it.copy(integrityStatus = ArtifactIntegrityStatus.SIGNATURE_VERIFIED)
+            },
+        )
+        val eligible = matcher.select(
+            builtIn.copy(releases = listOf(fullyEligible)),
+            huaweiRequest(),
+        )
+
+        assertEquals(2, eligible.installableArtifacts.size)
+        assertTrue(eligible.verificationAssessments.all { it.meetsArtifactInstallationGate })
+    }
+
     private fun candidateRelease(): ComponentRelease = builtIn.releases.single()
 
     private fun verifiedRelease(): ComponentRelease = candidateRelease().copy(
         releaseId = "microg-huawei-hw-v0.3.15.250932-verified",
         releaseVersion = "v0.3.15.250932",
-        status = ComponentReleaseStatus.VERIFIED,
+        compatibilityStatus = CompatibilityValidationStatus.DEVICE_VERIFIED,
         publishedAt = "2026-04-24",
         artifacts = candidateRelease().artifacts.map { artifact ->
             artifact.copy(
@@ -166,7 +238,10 @@ class TrustedComponentCatalogMatcherTest {
                     else -> "com.android.vending-84022630-hw.apk"
                 },
                 verifiedDeviceFamilies = listOf(PURA_70_PRO_PLUS),
-                status = ComponentReleaseStatus.VERIFIED,
+                sha256 = "verified-sha256-${artifact.componentId}",
+                signingCertificateDigest = "verified-certificate-${artifact.componentId}",
+                integrityStatus = ArtifactIntegrityStatus.SIGNATURE_VERIFIED,
+                compatibilityStatus = CompatibilityValidationStatus.DEVICE_VERIFIED,
                 publishedAt = "2026-04-24",
             )
         },
