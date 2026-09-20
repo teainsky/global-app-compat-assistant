@@ -1,24 +1,31 @@
 package com.example.globalcompat
 
 import android.os.Bundle
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -30,13 +37,20 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.example.globalcompat.baseline.DeviceBaselineJsonExporter
+import com.example.globalcompat.baseline.DeviceBaselineReportFactory
+import com.example.globalcompat.baseline.DeviceBaselineScanResult
+import com.example.globalcompat.baseline.DeviceBaselineScanner
+import com.example.globalcompat.baseline.OfficialComponentComparison
+import com.example.globalcompat.baseline.OfficialComponentMatchStatus
+import com.example.globalcompat.baseline.UserFunctionalValidation
+import com.example.globalcompat.baseline.UserValidationAnswer
 import com.example.globalcompat.data.ComponentPresence
 import com.example.globalcompat.data.CompatibilityPlan
 import com.example.globalcompat.data.CompatibilityPlanId
-import com.example.globalcompat.data.DeviceEnvironmentScanner
-import com.example.globalcompat.data.EnvironmentReport
 import com.example.globalcompat.data.SystemComponent
 import com.example.globalcompat.ui.theme.GlobalCompatTheme
 import kotlinx.coroutines.Dispatchers
@@ -50,33 +64,74 @@ class MainActivity : ComponentActivity() {
         setContent {
             GlobalCompatTheme {
                 ScannerScreen(
-                    scanner = remember { DeviceEnvironmentScanner(applicationContext) },
+                    scanner = remember { DeviceBaselineScanner(applicationContext) },
                 )
             }
         }
     }
 }
 @Composable
-private fun ScannerScreen(scanner: DeviceEnvironmentScanner) {
-    var report by remember { mutableStateOf<EnvironmentReport?>(null) }
+private fun ScannerScreen(scanner: DeviceBaselineScanner) {
+    var scanResult by remember { mutableStateOf<DeviceBaselineScanResult?>(null) }
+    var functionalValidation by remember { mutableStateOf(UserFunctionalValidation()) }
+    var pendingJson by remember { mutableStateOf<String?>(null) }
     var isScanning by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
+    val reportFactory = remember { DeviceBaselineReportFactory() }
+    val saveLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/json"),
+    ) { uri ->
+        val json = pendingJson
+        pendingJson = null
+        if (uri != null && json != null) {
+            scope.launch {
+                val saved = withContext(Dispatchers.IO) {
+                    runCatching {
+                        context.contentResolver.openOutputStream(uri, "w")
+                            ?.bufferedWriter(Charsets.UTF_8)
+                            ?.use { writer -> writer.write(json) }
+                            ?: error("无法打开目标文件")
+                    }.isSuccess
+                }
+                Toast.makeText(
+                    context,
+                    if (saved) "兼容验证报告已保存" else "报告保存失败",
+                    Toast.LENGTH_SHORT,
+                ).show()
+            }
+        }
+    }
 
     Scaffold { innerPadding ->
         when {
             isScanning -> LoadingState(Modifier.padding(innerPadding))
-            report == null -> StartState(
+            scanResult == null -> StartState(
                 modifier = Modifier.padding(innerPadding),
                 onStart = {
                     isScanning = true
                     scope.launch {
-                        report = withContext(Dispatchers.IO) { scanner.scan() }
+                        scanResult = withContext(Dispatchers.IO) { scanner.scan() }
+                        functionalValidation = UserFunctionalValidation()
                         isScanning = false
                     }
                 },
             )
             else -> EnvironmentReportView(
-                report = checkNotNull(report),
+                scanResult = checkNotNull(scanResult),
+                functionalValidation = functionalValidation,
+                onFunctionalValidationChange = { functionalValidation = it },
+                onExport = {
+                    val result = checkNotNull(scanResult)
+                    val baseline = reportFactory.create(
+                        environment = result.environment,
+                        comparisons = result.componentComparisons,
+                        functionalValidation = functionalValidation,
+                        capturedAtEpochMillis = result.environment.scannedAtEpochMillis,
+                    )
+                    pendingJson = DeviceBaselineJsonExporter.toJson(baseline)
+                    saveLauncher.launch("device-baseline.json")
+                },
                 modifier = Modifier.padding(innerPadding),
             )
         }
@@ -130,9 +185,21 @@ private fun LoadingState(modifier: Modifier = Modifier) {
 
 @Composable
 private fun EnvironmentReportView(
-    report: EnvironmentReport,
+    scanResult: DeviceBaselineScanResult,
+    functionalValidation: UserFunctionalValidation,
+    onFunctionalValidationChange: (UserFunctionalValidation) -> Unit,
+    onExport: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val report = scanResult.environment
+    val validationRecordAvailable = remember(scanResult, functionalValidation) {
+        DeviceBaselineReportFactory().create(
+            environment = report,
+            comparisons = scanResult.componentComparisons,
+            functionalValidation = functionalValidation,
+            capturedAtEpochMillis = report.scannedAtEpochMillis,
+        ).deviceValidationRecord != null
+    }
     LazyColumn(
         modifier = modifier.fillMaxSize(),
         contentPadding = PaddingValues(20.dp),
@@ -190,6 +257,24 @@ private fun EnvironmentReportView(
         item {
             CompatibilityPlanCard(report.compatibilityPlan)
         }
+        item {
+            Text(
+                text = "官方组件指纹比对",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+            )
+        }
+        items(scanResult.componentComparisons, key = { it.fingerprint.packageName }) { comparison ->
+            ComponentFingerprintCard(comparison)
+        }
+        item {
+            UserValidationSection(
+                validation = functionalValidation,
+                onChange = onFunctionalValidationChange,
+                validationRecordAvailable = validationRecordAvailable,
+                onExport = onExport,
+            )
+        }
     }
 }
 
@@ -241,6 +326,110 @@ private fun CompatibilityPlanCard(plan: CompatibilityPlan) {
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun ComponentFingerprintCard(comparison: OfficialComponentComparison) {
+    val fingerprint = comparison.fingerprint
+    val status = when (comparison.status) {
+        OfficialComponentMatchStatus.OFFICIAL_METADATA_MATCH -> "与已审计官方组件一致"
+        OfficialComponentMatchStatus.VERSION_MISMATCH -> "版本不一致"
+        OfficialComponentMatchStatus.SIGNER_MISMATCH -> "签名不一致"
+        OfficialComponentMatchStatus.NOT_INSTALLED -> "未安装"
+        OfficialComponentMatchStatus.UNREADABLE -> "无法读取"
+        OfficialComponentMatchStatus.UNKNOWN -> "无法安全判断"
+    }
+    ReportSection(fingerprint.packageName) {
+        ReportRow("官方匹配", status)
+        ReportRow("已安装", if (fingerprint.installed) "是" else "否")
+        fingerprint.enabled?.let { ReportRow("已启用", if (it) "是" else "否") }
+        fingerprint.versionName?.let { ReportRow("versionName", it) }
+        fingerprint.versionCode?.let { ReportRow("versionCode", it.toString()) }
+        if (fingerprint.signingCertificateSha256.isNotEmpty()) {
+            ReportRow(
+                "签名证书 SHA-256",
+                fingerprint.signingCertificateSha256.joinToString(),
+            )
+        }
+        fingerprint.installSource?.let { ReportRow("安装来源", it) }
+        Text(
+            text = "版本与签名匹配只表示安装内容与已审计官方组件一致，不代表设备兼容性已验证。",
+            style = MaterialTheme.typography.bodySmall,
+        )
+    }
+}
+
+@Composable
+private fun UserValidationSection(
+    validation: UserFunctionalValidation,
+    onChange: (UserFunctionalValidation) -> Unit,
+    validationRecordAvailable: Boolean,
+    onExport: () -> Unit,
+) {
+    ReportSection("真实使用验证") {
+        ValidationAnswerRow(
+            label = "Google账号可以登录",
+            answer = validation.googleAccountLogin,
+            onAnswer = { onChange(validation.copy(googleAccountLogin = it)) },
+        )
+        ValidationAnswerRow(
+            label = "ChatGPT可以登录使用",
+            answer = validation.chatGptLoginAndUse,
+            onAnswer = { onChange(validation.copy(chatGptLoginAndUse = it)) },
+        )
+        ValidationAnswerRow(
+            label = "Chrome可以登录Google",
+            answer = validation.chromeGoogleLogin,
+            onAnswer = { onChange(validation.copy(chromeGoogleLogin = it)) },
+        )
+        Text(
+            text = if (validationRecordAvailable) {
+                "已满足本机验证记录条件；不会修改全局 catalog。"
+            } else {
+                "只有两件套官方匹配、设备信息完整且三项均确认成功时，才生成本机验证记录。"
+            },
+            style = MaterialTheme.typography.bodySmall,
+        )
+        OutlinedButton(
+            modifier = Modifier.fillMaxWidth(),
+            onClick = onExport,
+        ) {
+            Text("导出兼容验证报告")
+        }
+        Text(
+            text = "报告通过系统保存，不会由本应用上传。",
+            style = MaterialTheme.typography.bodySmall,
+        )
+    }
+}
+
+@Composable
+private fun ValidationAnswerRow(
+    label: String,
+    answer: UserValidationAnswer,
+    onAnswer: (UserValidationAnswer) -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = label,
+            modifier = Modifier.weight(1f),
+            style = MaterialTheme.typography.bodyMedium,
+        )
+        FilterChip(
+            selected = answer == UserValidationAnswer.YES,
+            onClick = { onAnswer(UserValidationAnswer.YES) },
+            label = { Text("是") },
+        )
+        Spacer(Modifier.width(8.dp))
+        FilterChip(
+            selected = answer == UserValidationAnswer.NO,
+            onClick = { onAnswer(UserValidationAnswer.NO) },
+            label = { Text("否") },
+        )
     }
 }
 

@@ -165,6 +165,7 @@ class TrustedComponentCatalogMatcher {
             artifact.releaseVersion == releaseVersion &&
             !artifact.artifactFilename.isNullOrBlank() &&
             !artifact.artifactVersionCode.isNullOrBlank() &&
+            !artifact.artifactVersionName.isNullOrBlank() &&
             artifact.metadataSource != null &&
             artifact.metadataSource == artifact.sourceType &&
             !artifact.sourceReleaseUrl.isNullOrBlank() &&

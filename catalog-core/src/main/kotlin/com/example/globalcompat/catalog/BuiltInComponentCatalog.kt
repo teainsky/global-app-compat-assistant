@@ -11,7 +11,7 @@ object BuiltInComponentCatalog {
         "https://github.com/microg/GmsCore/releases/tag/v0.3.16.252432"
 
     val catalog = ComponentCatalog(
-        schemaVersion = 3,
+        schemaVersion = 4,
         releases = listOf(
             ComponentRelease(
                 releaseId = "microg-huawei-hw-v0.3.16.252432",
@@ -36,7 +36,9 @@ object BuiltInComponentCatalog {
                         packageName = "com.google.android.gms",
                         artifactFilename = "com.google.android.gms-252432032-hw.apk",
                         artifactVersionCode = "252432032",
+                        artifactVersionName = "0.3.16.252432-hw",
                         githubAssetId = 476760666L,
+                        sha256 = "a44ce933e2336d3340eb82ad3bb28bba03bc56a7b3cf3c98250a225c55b572de",
                         license = "Apache-2.0",
                     ),
                     huaweiArtifact(
@@ -44,7 +46,9 @@ object BuiltInComponentCatalog {
                         packageName = "com.android.vending",
                         artifactFilename = "com.android.vending-84022632-hw.apk",
                         artifactVersionCode = "84022632",
+                        artifactVersionName = "0.3.16.40226-hw",
                         githubAssetId = 476761461L,
+                        sha256 = "c1aa0c8854fcdac31d23d54e1ea62daedff6b7a6405a2f5ff5351c2dde8f113d",
                         license = null,
                     ),
                 ),
@@ -75,7 +79,9 @@ object BuiltInComponentCatalog {
         packageName: String,
         artifactFilename: String,
         artifactVersionCode: String,
+        artifactVersionName: String,
         githubAssetId: Long,
+        sha256: String,
         license: String?,
     ) = ComponentArtifact(
         componentId = componentId,
@@ -83,21 +89,25 @@ object BuiltInComponentCatalog {
         releaseVersion = RELEASE_VERSION,
         artifactFilename = artifactFilename,
         artifactVersionCode = artifactVersionCode,
+        artifactVersionName = artifactVersionName,
         githubAssetId = githubAssetId,
         variant = ComponentVariant.HUAWEI_HW,
         sourceType = ComponentSourceType.OFFICIAL_MICROG_GITHUB,
         metadataSource = ComponentSourceType.OFFICIAL_MICROG_GITHUB,
         sourceReleaseUrl = RELEASE_SOURCE,
-        sha256 = null,
-        signingCertificateDigest = null,
+        sha256 = sha256,
+        signingCertificateDigest = SIGNER_SHA256,
         minSystemVersion = "HarmonyOS 1.0 / supported EMUI",
         maxSystemVersion = "HarmonyOS 4.x / supported EMUI",
         verifiedDeviceFamilies = emptyList(),
         blockedDeviceFamilies = emptyList(),
         blockedSystemVersions = emptyList(),
-        integrityStatus = ArtifactIntegrityStatus.SOURCE_VERIFIED,
+        integrityStatus = ArtifactIntegrityStatus.SIGNATURE_VERIFIED,
         compatibilityStatus = CompatibilityValidationStatus.UNTESTED,
         publishedAt = PUBLISHED_AT,
         license = license,
     )
+
+    private const val SIGNER_SHA256 =
+        "9bd06727e62796c0130eb6dab39b73157451582cbd138e86c468acc395d14165"
 }

@@ -25,6 +25,7 @@ data class ComponentArtifact(
     val releaseVersion: String,
     val artifactFilename: String?,
     val artifactVersionCode: String?,
+    val artifactVersionName: String? = null,
     val githubAssetId: Long? = null,
     val variant: ComponentVariant,
     val sourceType: ComponentSourceType,

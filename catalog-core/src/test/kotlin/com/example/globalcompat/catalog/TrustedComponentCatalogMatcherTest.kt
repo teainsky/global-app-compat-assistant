@@ -32,7 +32,7 @@ class TrustedComponentCatalogMatcherTest {
         )
         assertTrue(selection.compatibleArtifacts.all {
             it.compatibilityStatus == CompatibilityValidationStatus.UNTESTED &&
-                it.integrityStatus == ArtifactIntegrityStatus.SOURCE_VERIFIED
+                it.integrityStatus == ArtifactIntegrityStatus.SIGNATURE_VERIFIED
         })
     }
 
@@ -116,19 +116,19 @@ class TrustedComponentCatalogMatcherTest {
     }
 
     @Test
-    fun `missing hash and signing digest is explicitly not ready for download verification`() {
+    fun `audited integrity evidence is ready but remains non installable while untested`() {
         val selection = matcher.select(builtIn, huaweiRequest())
 
-        assertTrue(selection.compatibleArtifacts.all { it.sha256 == null })
-        assertTrue(selection.compatibleArtifacts.all { it.signingCertificateDigest == null })
+        assertTrue(selection.compatibleArtifacts.all { !it.sha256.isNullOrBlank() })
+        assertTrue(selection.compatibleArtifacts.all { !it.signingCertificateDigest.isNullOrBlank() })
         assertTrue(selection.verificationAssessments.all { assessment ->
-            assessment.readiness ==
-                ArtifactVerificationReadiness.NOT_READY_MISSING_INTEGRITY_METADATA
+            assessment.readiness == ArtifactVerificationReadiness.READY_FOR_DOWNLOAD_VERIFICATION
         })
-        assertTrue(selection.verificationAssessments.all { !it.isReadyForDownloadVerification })
+        assertTrue(selection.verificationAssessments.all { it.isReadyForDownloadVerification })
         assertTrue(selection.verificationAssessments.all { !it.meetsArtifactInstallationGate })
-        assertTrue(selection.verificationAssessments.all {
-            it.missingMetadata == listOf("sha256", "signingCertificateDigest")
+        assertTrue(selection.verificationAssessments.all { it.missingMetadata.isEmpty() })
+        assertTrue(selection.compatibleArtifacts.all {
+            it.compatibilityStatus == CompatibilityValidationStatus.UNTESTED
         })
     }
 
@@ -181,6 +181,7 @@ class TrustedComponentCatalogMatcherTest {
         assertEquals("v0.3.16.252432", release.releaseTag)
         assertEquals("0.3.16.252432", release.releaseVersion)
         assertEquals("252432032", gmsCore.artifactVersionCode)
+        assertEquals("0.3.16.252432-hw", gmsCore.artifactVersionName)
         assertEquals("com.google.android.gms-252432032-hw.apk", gmsCore.artifactFilename)
         assertFalse(gmsCore.artifactFilename == "com.google.android.gms-250932032-hw.apk")
         assertEquals(476760666L, gmsCore.githubAssetId)
@@ -194,7 +195,10 @@ class TrustedComponentCatalogMatcherTest {
                 artifact.releaseVersion,
                 artifact.artifactFilename,
                 artifact.artifactVersionCode,
+                artifact.artifactVersionName,
                 artifact.githubAssetId,
+                artifact.sha256,
+                artifact.signingCertificateDigest,
                 artifact.metadataSource?.name,
                 artifact.sourceReleaseUrl,
             )
@@ -207,7 +211,10 @@ class TrustedComponentCatalogMatcherTest {
                     "0.3.16.252432",
                     "com.google.android.gms-252432032-hw.apk",
                     "252432032",
+                    "0.3.16.252432-hw",
                     476760666L,
+                    "a44ce933e2336d3340eb82ad3bb28bba03bc56a7b3cf3c98250a225c55b572de",
+                    OFFICIAL_SIGNER,
                     "OFFICIAL_MICROG_GITHUB",
                     OFFICIAL_RELEASE_URL,
                 ),
@@ -216,7 +223,10 @@ class TrustedComponentCatalogMatcherTest {
                     "0.3.16.252432",
                     "com.android.vending-84022632-hw.apk",
                     "84022632",
+                    "0.3.16.40226-hw",
                     476761461L,
+                    "c1aa0c8854fcdac31d23d54e1ea62daedff6b7a6405a2f5ff5351c2dde8f113d",
+                    OFFICIAL_SIGNER,
                     "OFFICIAL_MICROG_GITHUB",
                     OFFICIAL_RELEASE_URL,
                 ),
@@ -233,6 +243,7 @@ class TrustedComponentCatalogMatcherTest {
         val incompleteArtifacts = listOf(
             "artifactFilename" to gmsCore.copy(artifactFilename = null),
             "artifactVersionCode" to gmsCore.copy(artifactVersionCode = null),
+            "artifactVersionName" to gmsCore.copy(artifactVersionName = null),
             "githubAssetId" to gmsCore.copy(githubAssetId = null),
             "metadataSource" to gmsCore.copy(metadataSource = null),
             "sourceReleaseUrl" to gmsCore.copy(sourceReleaseUrl = null),
@@ -330,6 +341,10 @@ class TrustedComponentCatalogMatcherTest {
                     "com.google.android.gms" -> "250932030"
                     else -> "84022630"
                 },
+                artifactVersionName = when (artifact.packageName) {
+                    "com.google.android.gms" -> "0.3.15.250932-hw"
+                    else -> "0.3.15.40226-hw"
+                },
                 githubAssetId = when (artifact.packageName) {
                     "com.google.android.gms" -> 404343791L
                     else -> 404341356L
@@ -358,5 +373,7 @@ class TrustedComponentCatalogMatcherTest {
         const val PURA_70_PRO_PLUS = "HUAWEI_PURA_70_PRO_PLUS"
         const val OFFICIAL_RELEASE_URL =
             "https://github.com/microg/GmsCore/releases/tag/v0.3.16.252432"
+        const val OFFICIAL_SIGNER =
+            "9bd06727e62796c0130eb6dab39b73157451582cbd138e86c468acc395d14165"
     }
 }
