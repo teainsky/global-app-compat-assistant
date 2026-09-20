@@ -115,6 +115,13 @@ enum class ArtifactIntegrityStatus {
     FAILED,
 }
 
+enum class InstalledArtifactSignatureStatus {
+    ACTUAL_ARTIFACT_MATCH,
+    COMPATIBILITY_SIGNATURE_REPORTED,
+    SIGNER_MISMATCH,
+    UNKNOWN,
+}
+
 enum class CompatibilityValidationStatus {
     UNTESTED,
     CANDIDATE,

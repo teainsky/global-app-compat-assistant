@@ -48,6 +48,7 @@ import com.example.globalcompat.baseline.OfficialComponentComparison
 import com.example.globalcompat.baseline.OfficialComponentMatchStatus
 import com.example.globalcompat.baseline.UserFunctionalValidation
 import com.example.globalcompat.baseline.UserValidationAnswer
+import com.example.globalcompat.catalog.InstalledArtifactSignatureStatus
 import com.example.globalcompat.data.ComponentPresence
 import com.example.globalcompat.data.CompatibilityPlan
 import com.example.globalcompat.data.CompatibilityPlanId
@@ -333,28 +334,35 @@ private fun CompatibilityPlanCard(plan: CompatibilityPlan) {
 private fun ComponentFingerprintCard(comparison: OfficialComponentComparison) {
     val fingerprint = comparison.fingerprint
     val status = when (comparison.status) {
-        OfficialComponentMatchStatus.OFFICIAL_METADATA_MATCH -> "与已审计官方组件一致"
+        OfficialComponentMatchStatus.VERSION_MATCH -> "与已审计组件版本一致"
         OfficialComponentMatchStatus.VERSION_MISMATCH -> "版本不一致"
-        OfficialComponentMatchStatus.SIGNER_MISMATCH -> "签名不一致"
         OfficialComponentMatchStatus.NOT_INSTALLED -> "未安装"
         OfficialComponentMatchStatus.UNREADABLE -> "无法读取"
         OfficialComponentMatchStatus.UNKNOWN -> "无法安全判断"
     }
+    val signatureStatus = when (comparison.signatureStatus) {
+        InstalledArtifactSignatureStatus.ACTUAL_ARTIFACT_MATCH -> "APK 原文件完全匹配"
+        InstalledArtifactSignatureStatus.COMPATIBILITY_SIGNATURE_REPORTED ->
+            "系统报告兼容签名"
+        InstalledArtifactSignatureStatus.SIGNER_MISMATCH -> "报告签名不一致"
+        InstalledArtifactSignatureStatus.UNKNOWN -> "签名真实性未知"
+    }
     ReportSection(fingerprint.packageName) {
-        ReportRow("官方匹配", status)
+        ReportRow("版本匹配", status)
+        ReportRow("签名证据", signatureStatus)
         ReportRow("已安装", if (fingerprint.installed) "是" else "否")
         fingerprint.enabled?.let { ReportRow("已启用", if (it) "是" else "否") }
         fingerprint.versionName?.let { ReportRow("versionName", it) }
         fingerprint.versionCode?.let { ReportRow("versionCode", it.toString()) }
-        if (fingerprint.signingCertificateSha256.isNotEmpty()) {
+        if (fingerprint.reportedSigningCertificateSha256.isNotEmpty()) {
             ReportRow(
-                "签名证书 SHA-256",
-                fingerprint.signingCertificateSha256.joinToString(),
+                "系统报告签名证书 SHA-256",
+                fingerprint.reportedSigningCertificateSha256.joinToString(),
             )
         }
         fingerprint.installSource?.let { ReportRow("安装来源", it) }
         Text(
-            text = "版本与签名匹配只表示安装内容与已审计官方组件一致，不代表设备兼容性已验证。",
+            text = "系统报告的兼容签名不证明 APK 原文件一致；只有主机端字节哈希完全匹配才是最高真实性证据，且仍不代表设备兼容性已验证。",
             style = MaterialTheme.typography.bodySmall,
         )
     }

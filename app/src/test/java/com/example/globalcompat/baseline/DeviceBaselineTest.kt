@@ -1,6 +1,7 @@
 package com.example.globalcompat.baseline
 
 import com.example.globalcompat.catalog.BuiltInComponentCatalog
+import com.example.globalcompat.catalog.InstalledArtifactSignatureStatus
 import com.example.globalcompat.data.AndroidPlatform
 import com.example.globalcompat.data.CompatibilityPlan
 import com.example.globalcompat.data.CompatibilityPlanId
@@ -24,12 +25,27 @@ class DeviceBaselineTest {
     private val factory = DeviceBaselineReportFactory()
 
     @Test
-    fun `official versions and signers fully match`() {
+    fun `reported artifact signer does not prove original APK bytes`() {
         val comparisons = matcher.compare(officialPair())
 
         assertEquals(2, comparisons.size)
         assertTrue(comparisons.all {
-            it.status == OfficialComponentMatchStatus.OFFICIAL_METADATA_MATCH
+            it.status == OfficialComponentMatchStatus.VERSION_MATCH &&
+                it.signatureStatus == InstalledArtifactSignatureStatus.UNKNOWN
+        })
+    }
+
+    @Test
+    fun `Huawei hw build with Google reported signer is compatibility signature`() {
+        val comparisons = matcher.compare(
+            fingerprints = googleReportedPair(),
+            context = harmonyContext(),
+        )
+
+        assertTrue(comparisons.all {
+            it.status == OfficialComponentMatchStatus.VERSION_MATCH &&
+                it.signatureStatus ==
+                InstalledArtifactSignatureStatus.COMPATIBILITY_SIGNATURE_REPORTED
         })
     }
 
@@ -52,20 +68,22 @@ class DeviceBaselineTest {
     }
 
     @Test
-    fun `different signer reports signer mismatch`() {
+    fun `random reported signer remains signer mismatch`() {
         val fingerprints = officialPair().map { fingerprint ->
             if (fingerprint.packageName == GMS_PACKAGE) {
-                fingerprint.copy(signingCertificateSha256 = listOf("different-signer"))
+                fingerprint.copy(
+                    reportedSigningCertificateSha256 = listOf(RANDOM_SIGNER),
+                )
             } else {
                 fingerprint
             }
         }
 
-        val comparisons = matcher.compare(fingerprints)
+        val comparisons = matcher.compare(fingerprints, harmonyContext())
 
         assertEquals(
-            OfficialComponentMatchStatus.SIGNER_MISMATCH,
-            comparisons.single { it.fingerprint.packageName == GMS_PACKAGE }.status,
+            InstalledArtifactSignatureStatus.SIGNER_MISMATCH,
+            comparisons.single { it.fingerprint.packageName == GMS_PACKAGE }.signatureStatus,
         )
     }
 
@@ -79,7 +97,7 @@ class DeviceBaselineTest {
         val comparisons = matcher.compare(fingerprints)
 
         assertEquals(
-            OfficialComponentMatchStatus.OFFICIAL_METADATA_MATCH,
+            OfficialComponentMatchStatus.VERSION_MATCH,
             comparisons.single { it.fingerprint.packageName == GMS_PACKAGE }.status,
         )
         assertEquals(
@@ -116,7 +134,9 @@ class DeviceBaselineTest {
     fun `successful user confirmations cannot bypass signer mismatch`() {
         val mismatched = officialPair().map { fingerprint ->
             if (fingerprint.packageName == GMS_PACKAGE) {
-                fingerprint.copy(signingCertificateSha256 = listOf("different-signer"))
+                fingerprint.copy(
+                    reportedSigningCertificateSha256 = listOf(RANDOM_SIGNER),
+                )
             } else {
                 fingerprint
             }
@@ -133,7 +153,11 @@ class DeviceBaselineTest {
 
         val report = factory.create(
             environment(),
-            matcher.compare(officialPair()),
+            matcher.compare(
+                officialPair(),
+                harmonyContext(),
+                OFFICIAL_HASHES,
+            ),
             userValidation,
             NOW,
         )
@@ -145,7 +169,11 @@ class DeviceBaselineTest {
     fun `official pair and successful confirmations create local validation record`() {
         val report = factory.create(
             environment(),
-            matcher.compare(officialPair()),
+            matcher.compare(
+                officialPair(),
+                harmonyContext(),
+                OFFICIAL_HASHES,
+            ),
             allYes(),
             NOW,
         )
@@ -159,7 +187,11 @@ class DeviceBaselineTest {
     fun `baseline JSON excludes device unique identifiers`() {
         val report = factory.create(
             environment(),
-            matcher.compare(officialPair()),
+            matcher.compare(
+                officialPair(),
+                harmonyContext(),
+                OFFICIAL_HASHES,
+            ),
             allYes(),
             NOW,
         )
@@ -194,6 +226,16 @@ class DeviceBaselineTest {
         officialFingerprint(VENDING_PACKAGE),
     )
 
+    private fun googleReportedPair() = officialPair().map {
+        it.copy(reportedSigningCertificateSha256 = listOf(GOOGLE_SIGNER))
+    }
+
+    private fun harmonyContext() = ComponentMatchContext(
+        manufacturer = "HUAWEI",
+        romFamily = RomFamily.HARMONY_OS,
+        romVersion = "4.2",
+    )
+
     private fun officialFingerprint(packageName: String): InstalledComponentFingerprint =
         when (packageName) {
             GMS_PACKAGE -> fingerprint(
@@ -218,7 +260,7 @@ class DeviceBaselineTest {
         packageName = packageName,
         versionCode = versionCode,
         versionName = versionName,
-        signingCertificateSha256 = listOf(OFFICIAL_SIGNER),
+        reportedSigningCertificateSha256 = listOf(OFFICIAL_SIGNER),
         installSource = "com.huawei.appmarket",
         readStatus = ComponentFingerprintReadStatus.READABLE,
     )
@@ -229,7 +271,7 @@ class DeviceBaselineTest {
         packageName = packageName,
         versionCode = null,
         versionName = null,
-        signingCertificateSha256 = emptyList(),
+        reportedSigningCertificateSha256 = emptyList(),
         installSource = null,
         readStatus = ComponentFingerprintReadStatus.NOT_INSTALLED,
     )
@@ -291,5 +333,15 @@ class DeviceBaselineTest {
         const val VENDING_PACKAGE = "com.android.vending"
         const val OFFICIAL_SIGNER =
             "9bd06727e62796c0130eb6dab39b73157451582cbd138e86c468acc395d14165"
+        const val GOOGLE_SIGNER =
+            "f0fd6c5b410f25cb25c3b53346c8972fae30f8ee7411df910480ad6b2d60db83"
+        const val RANDOM_SIGNER =
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        val OFFICIAL_HASHES = mapOf(
+            GMS_PACKAGE to
+                "a44ce933e2336d3340eb82ad3bb28bba03bc56a7b3cf3c98250a225c55b572de",
+            VENDING_PACKAGE to
+                "c1aa0c8854fcdac31d23d54e1ea62daedff6b7a6405a2f5ff5351c2dde8f113d",
+        )
     }
 }

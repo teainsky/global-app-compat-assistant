@@ -30,3 +30,12 @@ tasks.register<JavaExec>("releaseInventory") {
     args("--inventory")
     workingDir = rootProject.projectDir
 }
+
+tasks.register<JavaExec>("deviceAudit") {
+    group = "verification"
+    description = "Audits installed Huawei microG APK bytes through read-only ADB commands."
+    classpath = sourceSets["main"].runtimeClasspath
+    mainClass.set(application.mainClass)
+    args("--device-audit")
+    workingDir = rootProject.projectDir
+}

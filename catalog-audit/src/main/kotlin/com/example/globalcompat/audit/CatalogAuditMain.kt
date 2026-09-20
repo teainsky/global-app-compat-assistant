@@ -8,6 +8,10 @@ fun main(args: Array<String>) {
         runInventory()
         return
     }
+    if ("--device-audit" in args) {
+        runDeviceAudit(args)
+        return
+    }
     val releaseTag = argument(args, "--release-tag")
     val outputDirectory = Path.of("build", "catalog-audit", releaseTag)
     val sdkValue = System.getenv("ANDROID_HOME")
@@ -24,6 +28,21 @@ fun main(args: Array<String>) {
     if (report.status != AuditStatus.PASS) exitProcess(2)
 }
 
+private fun runDeviceAudit(args: Array<String>) {
+    val sdkValue = System.getenv("ANDROID_HOME")
+        ?: System.getenv("ANDROID_SDK_ROOT")
+        ?: error("ANDROID_HOME or ANDROID_SDK_ROOT is required")
+    val sdkPath = Path.of(sdkValue)
+    val report = HostDeviceArtifactAuditor(
+        bridge = AdbHostDeviceBridge(sdkPath, optionalArgument(args, "--serial")),
+        apkInspector = AndroidSdkApkInspector(sdkPath),
+    ).audit()
+    val outputDirectory = Path.of("build", "catalog-audit", "device-artifact-audit")
+    HostDeviceAuditReportWriter().write(report, outputDirectory)
+    println("Host device audit ${report.status}: ${outputDirectory.resolve("host-audit-report.json")}")
+    if (report.status != AuditStatus.PASS) exitProcess(2)
+}
+
 private fun runInventory() {
     val outputDirectory = Path.of("build", "catalog-audit", "release-inventory")
     val report = ReleaseInventoryScanner(OfficialGitHubReleaseClient()).scan(limit = 10)
@@ -35,5 +54,12 @@ private fun runInventory() {
 private fun argument(args: Array<String>, name: String): String {
     val index = args.indexOf(name)
     require(index >= 0 && index + 1 < args.size) { "$name is required" }
+    return args[index + 1]
+}
+
+private fun optionalArgument(args: Array<String>, name: String): String? {
+    val index = args.indexOf(name)
+    if (index < 0) return null
+    require(index + 1 < args.size) { "$name requires a value" }
     return args[index + 1]
 }

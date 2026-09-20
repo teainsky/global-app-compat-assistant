@@ -1,5 +1,6 @@
 package com.example.globalcompat.baseline
 
+import com.example.globalcompat.catalog.InstalledArtifactSignatureStatus
 import com.example.globalcompat.data.EnvironmentReport
 import com.example.globalcompat.data.RomFamily
 import com.google.gson.GsonBuilder
@@ -33,9 +34,11 @@ class DeviceBaselineReportFactory {
                 packageName = fingerprint.packageName,
                 versionCode = fingerprint.versionCode,
                 versionName = fingerprint.versionName,
-                signingCertificateSha256 = fingerprint.signingCertificateSha256,
+                reportedSigningCertificateSha256 =
+                    fingerprint.reportedSigningCertificateSha256,
                 installSource = fingerprint.installSource,
                 officialMatchStatus = comparison.status,
+                signatureStatus = comparison.signatureStatus,
             )
         }
         val validationRecord = createValidationRecord(
@@ -51,7 +54,7 @@ class DeviceBaselineReportFactory {
                 environment.rom.displayName.isNotBlank(),
         )
         return DeviceBaselineReport(
-            schemaVersion = 1,
+            schemaVersion = 2,
             capturedAtEpochMillis = capturedAtEpochMillis,
             device = device,
             system = system,
@@ -72,7 +75,10 @@ class DeviceBaselineReportFactory {
         val requiredPackages = InstalledComponentFingerprintScanner.TARGET_PACKAGES.toSet()
         val matchesOfficialPair = comparisons.size == requiredPackages.size &&
             comparisons.mapTo(mutableSetOf()) { it.fingerprint.packageName } == requiredPackages &&
-            comparisons.all { it.status == OfficialComponentMatchStatus.OFFICIAL_METADATA_MATCH }
+            comparisons.all {
+                it.status == OfficialComponentMatchStatus.VERSION_MATCH &&
+                    it.signatureStatus == InstalledArtifactSignatureStatus.ACTUAL_ARTIFACT_MATCH
+            }
         if (!matchesOfficialPair || !hasRealDeviceInfo || !functionalValidation.allSuccessful()) {
             return null
         }

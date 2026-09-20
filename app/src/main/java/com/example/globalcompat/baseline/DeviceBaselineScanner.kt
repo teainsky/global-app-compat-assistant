@@ -23,7 +23,14 @@ class DeviceBaselineScanner(
         val fingerprints = fingerprintScanner.scan()
         return DeviceBaselineScanResult(
             environment = environment,
-            componentComparisons = componentMatcher.compare(fingerprints),
+            componentComparisons = componentMatcher.compare(
+                fingerprints = fingerprints,
+                context = ComponentMatchContext(
+                    manufacturer = environment.device.manufacturer,
+                    romFamily = environment.rom.family,
+                    romVersion = environment.rom.version,
+                ),
+            ),
         )
     }
 }

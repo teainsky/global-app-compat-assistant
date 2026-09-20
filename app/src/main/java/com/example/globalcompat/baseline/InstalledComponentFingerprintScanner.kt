@@ -11,7 +11,7 @@ data class InstalledPackageMetadata(
     val packageName: String,
     val versionCode: Long,
     val versionName: String?,
-    val signingCertificateSha256: List<String>,
+    val reportedSigningCertificateSha256: List<String>,
     val installSource: String?,
 )
 
@@ -33,7 +33,7 @@ class InstalledComponentFingerprintScanner(
             packageName = metadata.packageName,
             versionCode = metadata.versionCode,
             versionName = metadata.versionName,
-            signingCertificateSha256 = metadata.signingCertificateSha256,
+            reportedSigningCertificateSha256 = metadata.reportedSigningCertificateSha256,
             installSource = metadata.installSource,
             readStatus = ComponentFingerprintReadStatus.READABLE,
         )
@@ -44,7 +44,7 @@ class InstalledComponentFingerprintScanner(
             packageName = packageName,
             versionCode = null,
             versionName = null,
-            signingCertificateSha256 = emptyList(),
+            reportedSigningCertificateSha256 = emptyList(),
             installSource = null,
             readStatus = ComponentFingerprintReadStatus.UNREADABLE,
         )
@@ -56,7 +56,7 @@ class InstalledComponentFingerprintScanner(
         packageName = packageName,
         versionCode = null,
         versionName = null,
-        signingCertificateSha256 = emptyList(),
+        reportedSigningCertificateSha256 = emptyList(),
         installSource = null,
         readStatus = ComponentFingerprintReadStatus.NOT_INSTALLED,
     )
@@ -80,7 +80,7 @@ class AndroidInstalledPackageLookup(
             packageName = packageInfo.packageName,
             versionCode = PackageInfoCompat.getLongVersionCode(packageInfo),
             versionName = packageInfo.versionName,
-            signingCertificateSha256 = currentSignatures(packageInfo)
+            reportedSigningCertificateSha256 = currentSignatures(packageInfo)
                 .map { signature -> sha256(signature.toByteArray()) }
                 .distinct()
                 .sorted(),

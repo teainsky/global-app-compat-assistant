@@ -1,5 +1,7 @@
 package com.example.globalcompat.baseline
 
+import com.example.globalcompat.catalog.InstalledArtifactSignatureStatus
+
 enum class ComponentFingerprintReadStatus {
     READABLE,
     NOT_INSTALLED,
@@ -12,15 +14,14 @@ data class InstalledComponentFingerprint(
     val packageName: String,
     val versionCode: Long?,
     val versionName: String?,
-    val signingCertificateSha256: List<String>,
+    val reportedSigningCertificateSha256: List<String>,
     val installSource: String?,
     val readStatus: ComponentFingerprintReadStatus,
 )
 
 enum class OfficialComponentMatchStatus {
-    OFFICIAL_METADATA_MATCH,
+    VERSION_MATCH,
     VERSION_MISMATCH,
-    SIGNER_MISMATCH,
     NOT_INSTALLED,
     UNREADABLE,
     UNKNOWN,
@@ -30,6 +31,7 @@ data class OfficialComponentComparison(
     val componentId: String?,
     val fingerprint: InstalledComponentFingerprint,
     val status: OfficialComponentMatchStatus,
+    val signatureStatus: InstalledArtifactSignatureStatus,
     val expectedAssetId: Long?,
     val expectedVersionCode: Long?,
     val expectedVersionName: String?,
@@ -72,9 +74,10 @@ data class BaselineComponentReport(
     val packageName: String,
     val versionCode: Long?,
     val versionName: String?,
-    val signingCertificateSha256: List<String>,
+    val reportedSigningCertificateSha256: List<String>,
     val installSource: String?,
     val officialMatchStatus: OfficialComponentMatchStatus,
+    val signatureStatus: InstalledArtifactSignatureStatus,
 )
 
 data class DeviceValidationRecord(
