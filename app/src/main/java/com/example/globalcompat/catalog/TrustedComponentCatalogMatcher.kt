@@ -63,7 +63,7 @@ class TrustedComponentCatalogMatcher {
             }
             .maxWithOrNull(
                 compareBy<ComponentRelease> { it.publishedAt }
-                    .thenBy { it.releaseVersion },
+                    .thenBy { it.releaseTag },
             )
         val recommendedArtifacts = recommendedRelease
             ?.eligibleArtifacts(policy, requiredVariant, request)
@@ -112,7 +112,7 @@ class TrustedComponentCatalogMatcher {
         }
         return ArtifactVerificationAssessment(
             componentId = artifact.componentId,
-            artifactName = artifact.artifactName,
+            artifactFilename = artifact.artifactFilename,
             integrityStatus = artifact.integrityStatus,
             compatibilityStatus = artifact.compatibilityStatus,
             readiness = readiness,
@@ -146,8 +146,9 @@ class TrustedComponentCatalogMatcher {
         requiredVariant: ComponentVariant,
         request: CatalogMatchRequest,
     ): List<ComponentArtifact> = artifacts.filter { artifact ->
-        artifact.variant == requiredVariant &&
-            artifact.artifactName.endsWith("-hw.apk") &&
+        hasExplicitMetadataFor(artifact) &&
+            artifact.variant == requiredVariant &&
+            artifact.artifactFilename?.endsWith("-hw.apk") == true &&
             artifact.sourceType in policy.allowedSourceTypes &&
             artifact.integrityStatus != ArtifactIntegrityStatus.FAILED &&
             artifact.compatibilityStatus != CompatibilityValidationStatus.BLOCKED &&
@@ -157,6 +158,16 @@ class TrustedComponentCatalogMatcher {
             request.deviceFamily !in artifact.blockedDeviceFamilies &&
             request.systemVersion !in artifact.blockedSystemVersions
     }
+
+    private fun ComponentRelease.hasExplicitMetadataFor(artifact: ComponentArtifact): Boolean =
+        releaseTag.isNotBlank() &&
+            releaseVersion.isNotBlank() &&
+            artifact.releaseVersion == releaseVersion &&
+            !artifact.artifactFilename.isNullOrBlank() &&
+            !artifact.artifactVersionCode.isNullOrBlank() &&
+            artifact.metadataSource != null &&
+            artifact.metadataSource == artifact.sourceType &&
+            !artifact.sourceReleaseUrl.isNullOrBlank()
 
     private fun List<ComponentArtifact>.hasRequiredPair(planId: CompatibilityPlanId): Boolean {
         if (planId != CompatibilityPlanId.HUAWEI_MICROG_COMPAT_PLAN) return isNotEmpty()

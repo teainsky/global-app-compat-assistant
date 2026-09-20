@@ -4,16 +4,18 @@ import com.example.globalcompat.data.CompatibilityPlanId
 import com.example.globalcompat.data.DeviceCategory
 
 object BuiltInComponentCatalog {
-    private const val RELEASE_VERSION = "v0.3.16.252432"
+    private const val RELEASE_TAG = "v0.3.16.252432"
+    private const val RELEASE_VERSION = "0.3.16.252432"
     private const val PUBLISHED_AT = "2026-07-14T14:11:55Z"
     private const val RELEASE_SOURCE =
         "https://github.com/microg/GmsCore/releases/tag/v0.3.16.252432"
 
     val catalog = ComponentCatalog(
-        schemaVersion = 1,
+        schemaVersion = 2,
         releases = listOf(
             ComponentRelease(
                 releaseId = "microg-huawei-hw-v0.3.16.252432",
+                releaseTag = RELEASE_TAG,
                 releaseVersion = RELEASE_VERSION,
                 compatibilityStatus = CompatibilityValidationStatus.CANDIDATE,
                 publishedAt = PUBLISHED_AT,
@@ -32,13 +34,15 @@ object BuiltInComponentCatalog {
                     huaweiArtifact(
                         componentId = "microg_services_huawei_compatible",
                         packageName = "com.google.android.gms",
-                        artifactName = "com.google.android.gms-252432032-hw.apk",
+                        artifactFilename = "com.google.android.gms-250932032-hw.apk",
+                        artifactVersionCode = "250932032",
                         license = "Apache-2.0",
                     ),
                     huaweiArtifact(
                         componentId = "microg_companion_huawei_compatible",
                         packageName = "com.android.vending",
-                        artifactName = "com.android.vending-84022632-hw.apk",
+                        artifactFilename = "com.android.vending-84022632-hw.apk",
+                        artifactVersionCode = "84022632",
                         license = null,
                     ),
                 ),
@@ -66,16 +70,19 @@ object BuiltInComponentCatalog {
     private fun huaweiArtifact(
         componentId: String,
         packageName: String,
-        artifactName: String,
+        artifactFilename: String,
+        artifactVersionCode: String,
         license: String?,
     ) = ComponentArtifact(
         componentId = componentId,
         packageName = packageName,
         releaseVersion = RELEASE_VERSION,
-        artifactName = artifactName,
+        artifactFilename = artifactFilename,
+        artifactVersionCode = artifactVersionCode,
         variant = ComponentVariant.HUAWEI_HW,
         sourceType = ComponentSourceType.OFFICIAL_MICROG_GITHUB,
-        officialSource = RELEASE_SOURCE,
+        metadataSource = ComponentSourceType.OFFICIAL_MICROG_GITHUB,
+        sourceReleaseUrl = RELEASE_SOURCE,
         sha256 = null,
         signingCertificateDigest = null,
         minSystemVersion = "HarmonyOS 1.0 / supported EMUI",

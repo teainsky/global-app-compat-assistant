@@ -11,6 +11,7 @@ data class ComponentCatalog(
 
 data class ComponentRelease(
     val releaseId: String,
+    val releaseTag: String,
     val releaseVersion: String,
     val compatibilityStatus: CompatibilityValidationStatus,
     val publishedAt: String,
@@ -22,10 +23,12 @@ data class ComponentArtifact(
     val componentId: String,
     val packageName: String,
     val releaseVersion: String,
-    val artifactName: String,
+    val artifactFilename: String?,
+    val artifactVersionCode: String?,
     val variant: ComponentVariant,
     val sourceType: ComponentSourceType,
-    val officialSource: String,
+    val metadataSource: ComponentSourceType?,
+    val sourceReleaseUrl: String?,
     val sha256: String?,
     val signingCertificateDigest: String?,
     val minSystemVersion: String,
@@ -99,7 +102,7 @@ enum class ArtifactVerificationReadiness {
 
 data class ArtifactVerificationAssessment(
     val componentId: String,
-    val artifactName: String,
+    val artifactFilename: String?,
     val integrityStatus: ArtifactIntegrityStatus,
     val compatibilityStatus: CompatibilityValidationStatus,
     val readiness: ArtifactVerificationReadiness,

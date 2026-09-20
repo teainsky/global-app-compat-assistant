@@ -18,10 +18,10 @@ class TrustedComponentCatalogMatcherTest {
 
         assertEquals(
             listOf(
-                "com.google.android.gms-252432032-hw.apk",
+                "com.google.android.gms-250932032-hw.apk",
                 "com.android.vending-84022632-hw.apk",
             ),
-            selection.compatibleArtifacts.map { it.artifactName },
+            selection.compatibleArtifacts.map { it.artifactFilename },
         )
         assertTrue(selection.compatibleArtifacts.all { it.variant == ComponentVariant.HUAWEI_HW })
         assertTrue(selection.recommendedArtifacts.isEmpty())
@@ -43,7 +43,7 @@ class TrustedComponentCatalogMatcherTest {
             compatibilityStatus = CompatibilityValidationStatus.DEVICE_VERIFIED,
             artifacts = candidateRelease().artifacts.map { artifact ->
                 artifact.copy(
-                    artifactName = artifact.artifactName.replace("-hw.apk", ".apk"),
+                    artifactFilename = artifact.artifactFilename?.replace("-hw.apk", ".apk"),
                     variant = ComponentVariant.CUSTOM_ROM,
                     compatibilityStatus = CompatibilityValidationStatus.DEVICE_VERIFIED,
                 )
@@ -173,6 +173,88 @@ class TrustedComponentCatalogMatcherTest {
     }
 
     @Test
+    fun `release tag never determines Huawei GmsCore artifact filename`() {
+        val release = candidateRelease()
+        val gmsCore = release.artifacts.single { it.packageName == "com.google.android.gms" }
+
+        assertEquals("v0.3.16.252432", release.releaseTag)
+        assertEquals("0.3.16.252432", release.releaseVersion)
+        assertEquals("250932032", gmsCore.artifactVersionCode)
+        assertEquals("com.google.android.gms-250932032-hw.apk", gmsCore.artifactFilename)
+        assertFalse(gmsCore.artifactFilename == "com.google.android.gms-252432032-hw.apk")
+    }
+
+    @Test
+    fun `Huawei pair exactly matches explicit official release metadata`() {
+        val actual = candidateRelease().artifacts.associate { artifact ->
+            artifact.componentId to listOf(
+                artifact.packageName,
+                artifact.releaseVersion,
+                artifact.artifactFilename,
+                artifact.artifactVersionCode,
+                artifact.metadataSource?.name,
+                artifact.sourceReleaseUrl,
+            )
+        }
+
+        assertEquals(
+            mapOf(
+                "microg_services_huawei_compatible" to listOf(
+                    "com.google.android.gms",
+                    "0.3.16.252432",
+                    "com.google.android.gms-250932032-hw.apk",
+                    "250932032",
+                    "OFFICIAL_MICROG_GITHUB",
+                    OFFICIAL_RELEASE_URL,
+                ),
+                "microg_companion_huawei_compatible" to listOf(
+                    "com.android.vending",
+                    "0.3.16.252432",
+                    "com.android.vending-84022632-hw.apk",
+                    "84022632",
+                    "OFFICIAL_MICROG_GITHUB",
+                    OFFICIAL_RELEASE_URL,
+                ),
+            ),
+            actual,
+        )
+    }
+
+    @Test
+    fun `missing explicit artifact metadata fails closed without filename inference`() {
+        val gmsCore = candidateRelease().artifacts.single {
+            it.packageName == "com.google.android.gms"
+        }
+        val incompleteArtifacts = listOf(
+            "artifactFilename" to gmsCore.copy(artifactFilename = null),
+            "artifactVersionCode" to gmsCore.copy(artifactVersionCode = null),
+            "metadataSource" to gmsCore.copy(metadataSource = null),
+            "sourceReleaseUrl" to gmsCore.copy(sourceReleaseUrl = null),
+        )
+
+        incompleteArtifacts.forEach { (missingField, incompleteArtifact) ->
+            val incompleteRelease = candidateRelease().copy(
+                artifacts = candidateRelease().artifacts.map { artifact ->
+                    if (artifact.componentId == incompleteArtifact.componentId) {
+                        incompleteArtifact
+                    } else {
+                        artifact
+                    }
+                },
+            )
+            val selection = matcher.select(
+                builtIn.copy(releases = listOf(incompleteRelease)),
+                huaweiRequest(),
+            )
+
+            assertTrue("$missingField must fail closed", selection.compatibleReleases.isEmpty())
+            assertTrue("$missingField must not infer artifacts", selection.compatibleArtifacts.isEmpty())
+            assertTrue("$missingField must not recommend", selection.recommendedArtifacts.isEmpty())
+            assertTrue("$missingField must not install", selection.installableArtifacts.isEmpty())
+        }
+    }
+
+    @Test
     fun `hash and signature verification changes integrity only`() {
         val candidate = candidateRelease().artifacts.first()
 
@@ -227,16 +309,23 @@ class TrustedComponentCatalogMatcherTest {
 
     private fun verifiedRelease(): ComponentRelease = candidateRelease().copy(
         releaseId = "microg-huawei-hw-v0.3.15.250932-verified",
-        releaseVersion = "v0.3.15.250932",
+        releaseTag = "v0.3.15.250932",
+        releaseVersion = "0.3.15.250932",
         compatibilityStatus = CompatibilityValidationStatus.DEVICE_VERIFIED,
         publishedAt = "2026-04-24",
         artifacts = candidateRelease().artifacts.map { artifact ->
             artifact.copy(
-                releaseVersion = "v0.3.15.250932",
-                artifactName = when (artifact.packageName) {
+                releaseVersion = "0.3.15.250932",
+                artifactFilename = when (artifact.packageName) {
                     "com.google.android.gms" -> "com.google.android.gms-250932030-hw.apk"
                     else -> "com.android.vending-84022630-hw.apk"
                 },
+                artifactVersionCode = when (artifact.packageName) {
+                    "com.google.android.gms" -> "250932030"
+                    else -> "84022630"
+                },
+                sourceReleaseUrl =
+                    "https://github.com/microg/GmsCore/releases/tag/v0.3.15.250932",
                 verifiedDeviceFamilies = listOf(PURA_70_PRO_PLUS),
                 sha256 = "verified-sha256-${artifact.componentId}",
                 signingCertificateDigest = "verified-certificate-${artifact.componentId}",
@@ -257,5 +346,7 @@ class TrustedComponentCatalogMatcherTest {
 
     private companion object {
         const val PURA_70_PRO_PLUS = "HUAWEI_PURA_70_PRO_PLUS"
+        const val OFFICIAL_RELEASE_URL =
+            "https://github.com/microg/GmsCore/releases/tag/v0.3.16.252432"
     }
 }
