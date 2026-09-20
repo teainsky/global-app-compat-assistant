@@ -64,8 +64,38 @@ data class VerificationPolicy(
 
 enum class ComponentSourceType {
     OFFICIAL_MICROG_GITHUB,
+    OFFICIAL_MICROG_DOWNLOAD_PAGE,
     OFFICIAL_HUAWEI_APPGALLERY,
 }
+
+data class ArtifactDescriptor(
+    val componentId: String,
+    val packageName: String,
+    val releaseVersion: String,
+    val artifactFilename: String,
+    val artifactVersionCode: String,
+    val variant: ComponentVariant,
+)
+
+enum class SourceAvailabilityStatus {
+    AVAILABLE,
+    MISSING,
+    METADATA_ONLY,
+    UNRESOLVED,
+}
+
+data class ArtifactSourceRecord(
+    val componentId: String,
+    val sourceType: ComponentSourceType,
+    val availabilityStatus: SourceAvailabilityStatus,
+    val sourcePageUrl: String,
+    val downloadUrl: String? = null,
+    val sourceAssetId: String? = null,
+    val observedFilename: String? = null,
+    val expectedSize: Long? = null,
+    val sourceDigest: String? = null,
+    val evidence: List<String> = emptyList(),
+)
 
 enum class ComponentVariant {
     HUAWEI_HW,

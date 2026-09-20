@@ -1,5 +1,7 @@
 package com.example.globalcompat.audit
 
+import com.example.globalcompat.catalog.ArtifactDescriptor
+import com.example.globalcompat.catalog.ArtifactSourceRecord
 import java.nio.file.Path
 
 enum class AuditStatus {
@@ -10,6 +12,7 @@ enum class AuditStatus {
 data class GitHubReleaseMetadata(
     val releaseTag: String,
     val releaseUrl: String,
+    val releaseNotes: String,
     val assets: List<GitHubAssetMetadata>,
 )
 
@@ -34,7 +37,8 @@ data class ApkInspection(
 
 data class ArtifactAuditResult(
     val releaseTag: String,
-    val githubAssetId: Long,
+    val sourceType: String,
+    val sourceAssetId: String?,
     val artifactFilename: String,
     val sourceUrl: String,
     val downloadedSize: Long,
@@ -56,6 +60,7 @@ data class AuditFailure(
 data class CatalogAuditReport(
     val releaseTag: String,
     val status: AuditStatus,
+    val sourceRecords: List<ArtifactSourceRecord>,
     val artifacts: List<ArtifactAuditResult>,
     val failures: List<AuditFailure>,
     val auditedAt: String,
@@ -64,7 +69,24 @@ data class CatalogAuditReport(
 interface GitHubReleaseClient {
     fun getRelease(releaseTag: String): GitHubReleaseMetadata
 
-    fun download(asset: GitHubAssetMetadata, destination: Path)
+}
+
+interface ArtifactSourceResolver {
+    fun resolve(releaseTag: String, descriptors: List<ArtifactDescriptor>): List<ArtifactSourceRecord>
+}
+
+data class OfficialPageSnapshot(
+    val finalUrl: String?,
+    val body: String?,
+    val error: String?,
+)
+
+interface OfficialPageClient {
+    fun fetch(url: String): OfficialPageSnapshot
+}
+
+interface OfficialArtifactDownloader {
+    fun download(record: ArtifactSourceRecord, destination: Path)
 }
 
 interface ApkInspector {

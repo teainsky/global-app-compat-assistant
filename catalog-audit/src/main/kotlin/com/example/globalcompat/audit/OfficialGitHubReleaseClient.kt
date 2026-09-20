@@ -5,11 +5,11 @@ import java.net.URI
 import java.net.http.HttpClient
 import java.net.http.HttpRequest
 import java.net.http.HttpResponse
-import java.nio.file.Files
-import java.nio.file.Path
+import java.time.Duration
 
 class OfficialGitHubReleaseClient(
     private val httpClient: HttpClient = HttpClient.newBuilder()
+        .connectTimeout(Duration.ofSeconds(20))
         .followRedirects(HttpClient.Redirect.NORMAL)
         .build(),
 ) : GitHubReleaseClient {
@@ -19,6 +19,7 @@ class OfficialGitHubReleaseClient(
             .header("Accept", "application/vnd.github+json")
             .header("X-GitHub-Api-Version", "2022-11-28")
             .header("User-Agent", "global-app-compat-assistant-catalog-audit")
+            .timeout(Duration.ofSeconds(30))
             .GET()
             .build()
         val response = httpClient.send(request, HttpResponse.BodyHandlers.ofString())
@@ -29,6 +30,7 @@ class OfficialGitHubReleaseClient(
         return GitHubReleaseMetadata(
             releaseTag = root.get("tag_name").asString,
             releaseUrl = root.get("html_url").asString,
+            releaseNotes = root.get("body")?.takeUnless { it.isJsonNull }?.asString.orEmpty(),
             assets = root.getAsJsonArray("assets").map { element ->
                 val asset = element.asJsonObject
                 GitHubAssetMetadata(
@@ -44,16 +46,4 @@ class OfficialGitHubReleaseClient(
         )
     }
 
-    override fun download(asset: GitHubAssetMetadata, destination: Path) {
-        Files.createDirectories(destination.parent)
-        val request = HttpRequest.newBuilder(URI.create(asset.downloadUrl))
-            .header("Accept", "application/octet-stream")
-            .header("User-Agent", "global-app-compat-assistant-catalog-audit")
-            .GET()
-            .build()
-        val response = httpClient.send(request, HttpResponse.BodyHandlers.ofFile(destination))
-        check(response.statusCode() in 200..299) {
-            "GitHub asset download returned HTTP ${response.statusCode()}"
-        }
-    }
 }

@@ -13,9 +13,16 @@ class AuditReportWriter {
         val text = buildString {
             appendLine("Catalog audit: ${report.releaseTag}")
             appendLine("Result: ${report.status}")
+            report.sourceRecords.forEach { record ->
+                appendLine(
+                    "Source: ${record.componentId} / ${record.sourceType} = " +
+                        record.availabilityStatus,
+                )
+            }
             report.artifacts.forEach { artifact ->
                 appendLine("- ${artifact.artifactFilename}")
-                appendLine("  asset ID: ${artifact.githubAssetId}")
+                appendLine("  source: ${artifact.sourceType}")
+                appendLine("  asset ID: ${artifact.sourceAssetId}")
                 appendLine("  SHA-256: ${artifact.sha256}")
                 appendLine("  package: ${artifact.packageName}")
                 appendLine("  version: ${artifact.versionName} (${artifact.versionCode})")

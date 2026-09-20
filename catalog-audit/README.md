@@ -1,8 +1,10 @@
 # catalog-audit
 
-Development-only audit CLI for official microG GitHub release assets. It reads the built-in
-catalog from `catalog-core`, matches each asset by its exact recorded filename, downloads only to
-the root `build/catalog-audit` directory, and uses Android SDK `apkanalyzer` and `apksigner`.
+Development-only audit CLI for official microG artifacts. It reads descriptors from `catalog-core`
+and records availability independently for the microG GitHub API, the official microG download
+page, and Huawei AppGallery. Release-note declarations are metadata only; only an exact official
+binary record can continue to download and APK inspection. Downloads stay under the root
+`build/catalog-audit` directory, using Android SDK `apkanalyzer` and `apksigner`.
 
 Run from the repository root:
 

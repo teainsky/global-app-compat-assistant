@@ -9,8 +9,10 @@ fun main(args: Array<String>) {
     val sdkValue = System.getenv("ANDROID_HOME")
         ?: System.getenv("ANDROID_SDK_ROOT")
         ?: error("ANDROID_HOME or ANDROID_SDK_ROOT is required")
+    val github = OfficialGitHubReleaseClient()
     val report = CatalogAuditEngine(
-        github = OfficialGitHubReleaseClient(),
+        sourceResolver = OfficialArtifactSourceResolver(github),
+        downloader = HttpOfficialArtifactDownloader(),
         apkInspector = AndroidSdkApkInspector(Path.of(sdkValue)),
     ).audit(releaseTag, outputDirectory)
     AuditReportWriter().write(report, outputDirectory)

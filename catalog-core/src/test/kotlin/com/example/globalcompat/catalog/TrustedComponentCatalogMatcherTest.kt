@@ -166,6 +166,7 @@ class TrustedComponentCatalogMatcherTest {
         assertEquals(
             setOf(
                 ComponentSourceType.OFFICIAL_MICROG_GITHUB,
+                ComponentSourceType.OFFICIAL_MICROG_DOWNLOAD_PAGE,
                 ComponentSourceType.OFFICIAL_HUAWEI_APPGALLERY,
             ),
             builtIn.verificationPolicy.allowedSourceTypes,

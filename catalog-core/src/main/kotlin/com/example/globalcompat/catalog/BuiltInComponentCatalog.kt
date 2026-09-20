@@ -11,7 +11,7 @@ object BuiltInComponentCatalog {
         "https://github.com/microg/GmsCore/releases/tag/v0.3.16.252432"
 
     val catalog = ComponentCatalog(
-        schemaVersion = 2,
+        schemaVersion = 3,
         releases = listOf(
             ComponentRelease(
                 releaseId = "microg-huawei-hw-v0.3.16.252432",
@@ -51,6 +51,7 @@ object BuiltInComponentCatalog {
         verificationPolicy = VerificationPolicy(
             allowedSourceTypes = setOf(
                 ComponentSourceType.OFFICIAL_MICROG_GITHUB,
+                ComponentSourceType.OFFICIAL_MICROG_DOWNLOAD_PAGE,
                 ComponentSourceType.OFFICIAL_HUAWEI_APPGALLERY,
             ),
             recommendableCompatibilityStatuses = setOf(
