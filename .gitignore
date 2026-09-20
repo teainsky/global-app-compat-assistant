@@ -5,4 +5,5 @@
 .toolchains/
 build/
 **/build/
+*.apk
 local.properties
