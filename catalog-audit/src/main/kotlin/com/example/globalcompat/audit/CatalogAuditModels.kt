@@ -2,6 +2,8 @@ package com.example.globalcompat.audit
 
 import com.example.globalcompat.catalog.ArtifactDescriptor
 import com.example.globalcompat.catalog.ArtifactSourceRecord
+import com.example.globalcompat.catalog.ArtifactIntegrityStatus
+import com.example.globalcompat.catalog.CompatibilityValidationStatus
 import java.nio.file.Path
 
 enum class AuditStatus {
@@ -27,6 +29,7 @@ data class GitHubAssetMetadata(
     val size: Long,
     val digest: String?,
     val downloadUrl: String,
+    val apiUrl: String? = null,
 )
 
 data class ApkInspection(
@@ -39,20 +42,30 @@ data class ApkInspection(
 )
 
 data class ArtifactAuditResult(
+    val componentId: String,
     val releaseTag: String,
     val sourceType: String,
-    val sourceAssetId: String?,
-    val artifactFilename: String,
+    val filename: String,
+    val assetId: Long,
+    val assetSize: Long,
     val sourceUrl: String,
-    val downloadedSize: Long,
-    val githubAssetDigest: String?,
-    val sha256: String,
+    val githubDigest: String?,
+    val githubDigestMatches: Boolean?,
+    val locallyCalculatedSha256: String,
     val packageName: String,
     val versionName: String,
     val versionCode: String,
     val signingCertificateSha256: List<String>,
-    val apkSignatureVerificationResult: String,
+    val apksignerVerificationResult: String,
+    val artifactIntegrityStatus: ArtifactIntegrityStatus,
+    val compatibilityValidationStatus: CompatibilityValidationStatus,
     val auditedAt: String,
+)
+
+data class AuditWarning(
+    val code: String,
+    val componentId: String,
+    val message: String,
 )
 
 data class AuditFailure(
@@ -65,8 +78,17 @@ data class CatalogAuditReport(
     val status: AuditStatus,
     val sourceRecords: List<ArtifactSourceRecord>,
     val artifacts: List<ArtifactAuditResult>,
+    val warnings: List<AuditWarning>,
     val failures: List<AuditFailure>,
     val auditedAt: String,
+)
+
+data class AuditedManifest(
+    val schemaVersion: Int,
+    val releaseTag: String,
+    val auditStatus: AuditStatus,
+    val generatedAt: String,
+    val artifacts: List<ArtifactAuditResult>,
 )
 
 interface GitHubReleaseClient {

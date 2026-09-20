@@ -67,6 +67,7 @@ class OfficialGitHubReleaseClient(
                     size = asset.get("size").asLong,
                     digest = asset.get("digest")?.takeUnless { it.isJsonNull }?.asString,
                     downloadUrl = asset.get("browser_download_url").asString,
+                    apiUrl = asset.get("url")?.takeUnless { it.isJsonNull }?.asString,
                 )
             },
         )

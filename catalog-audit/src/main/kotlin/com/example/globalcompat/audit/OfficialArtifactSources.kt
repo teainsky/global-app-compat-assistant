@@ -10,6 +10,8 @@ import java.net.http.HttpRequest
 import java.net.http.HttpResponse
 import java.nio.file.Files
 import java.nio.file.Path
+import java.nio.file.AtomicMoveNotSupportedException
+import java.nio.file.StandardCopyOption
 import java.time.Duration
 
 class OfficialArtifactSourceResolver(
@@ -52,19 +54,21 @@ class OfficialArtifactSourceResolver(
                 "GitHub release tag mismatch: ${release.releaseTag}",
             )
         }
-        val matches = release.assets.filter { it.name == descriptor.artifactFilename }
-        val declared = release.releaseNotes.contains(descriptor.artifactFilename)
+        val expectedAssetId = descriptor.githubAssetId
+            ?: return unresolved(
+                descriptor,
+                ComponentSourceType.OFFICIAL_MICROG_GITHUB,
+                release.releaseUrl,
+                "Catalog GitHub asset ID is missing",
+            )
+        val matches = release.assets.filter { it.id == expectedAssetId }
         if (matches.isEmpty()) {
             return ArtifactSourceRecord(
                 componentId = descriptor.componentId,
                 sourceType = ComponentSourceType.OFFICIAL_MICROG_GITHUB,
                 availabilityStatus = SourceAvailabilityStatus.MISSING,
                 sourcePageUrl = release.releaseUrl,
-                observedFilename = descriptor.artifactFilename,
-                evidence = listOfNotNull(
-                    "GitHub API returned zero exact-name assets",
-                    if (declared) "Release notes declare the artifact" else null,
-                ),
+                evidence = listOf("GitHub API returned zero assets for ID $expectedAssetId"),
             )
         }
         if (matches.size != 1) {
@@ -72,16 +76,20 @@ class OfficialArtifactSourceResolver(
                 descriptor,
                 ComponentSourceType.OFFICIAL_MICROG_GITHUB,
                 release.releaseUrl,
-                "GitHub API returned ${matches.size} exact-name assets",
+                "GitHub API returned ${matches.size} assets for ID $expectedAssetId",
             )
         }
         val asset = matches.single()
         val expectedUrl =
             "https://github.com/microg/GmsCore/releases/download/$releaseTag/${asset.name}"
+        val expectedApiUrl =
+            "https://api.github.com/repos/microg/GmsCore/releases/assets/${asset.id}"
         if (asset.state != "uploaded" ||
             asset.contentType != "application/vnd.android.package-archive" ||
             asset.size <= 0L ||
-            asset.downloadUrl != expectedUrl
+            asset.name != descriptor.artifactFilename ||
+            asset.downloadUrl != expectedUrl ||
+            (asset.apiUrl != null && asset.apiUrl != expectedApiUrl)
         ) {
             return unresolved(
                 descriptor,
@@ -90,19 +98,37 @@ class OfficialArtifactSourceResolver(
                 "GitHub asset metadata mismatch",
             )
         }
+        val noteFilenames = releaseNoteFilenames(release.releaseNotes, descriptor.packageName)
+        val notesMismatch = noteFilenames.isNotEmpty() && asset.name !in noteFilenames
         return ArtifactSourceRecord(
             componentId = descriptor.componentId,
             sourceType = ComponentSourceType.OFFICIAL_MICROG_GITHUB,
             availabilityStatus = SourceAvailabilityStatus.AVAILABLE,
             sourcePageUrl = release.releaseUrl,
-            downloadUrl = asset.downloadUrl,
-            sourceAssetId = asset.id.toString(),
+            downloadUrl = asset.apiUrl ?: asset.downloadUrl,
+            sourceAssetId = asset.id,
             observedFilename = asset.name,
             expectedSize = asset.size,
             sourceDigest = asset.digest,
-            evidence = listOf("GitHub API returned one exact-name uploaded APK asset"),
+            evidence = buildList {
+                add("GitHub API returned one uploaded APK for asset ID ${asset.id}")
+                if (notesMismatch) {
+                    add("Release notes filenames for ${descriptor.packageName}: ${noteFilenames.joinToString()}")
+                }
+            },
+            warningCodes = if (notesMismatch) {
+                listOf("RELEASE_NOTES_ASSET_MISMATCH")
+            } else {
+                emptyList()
+            },
         )
     }
+
+    private fun releaseNoteFilenames(notes: String, packageName: String): Set<String> =
+        Regex("${Regex.escape(packageName)}-[A-Za-z0-9._+-]+-hw\\.apk")
+            .findAll(notes)
+            .map { it.value }
+            .toSet()
 
     private fun metadataPageRecord(
         descriptor: ArtifactDescriptor,
@@ -199,13 +225,23 @@ class HttpOfficialPageClient(
     }
 }
 
-class HttpOfficialArtifactDownloader(
-    private val httpClient: HttpClient = HttpClient.newBuilder()
-        .connectTimeout(Duration.ofSeconds(20))
-        .followRedirects(HttpClient.Redirect.NORMAL)
-        .build(),
+class CurlOfficialArtifactDownloader(
+    private val connectTimeoutSeconds: Int = 20,
+    private val readStallTimeoutSeconds: Int = 60,
+    private val attemptTimeoutSeconds: Int = 300,
+    private val maxAttempts: Int = 3,
+    private val curlExecutable: String =
+        if (System.getProperty("os.name").startsWith("Windows", ignoreCase = true)) {
+            "curl.exe"
+        } else {
+            "curl"
+        },
 ) : OfficialArtifactDownloader {
     override fun download(record: ArtifactSourceRecord, destination: Path) {
+        require(maxAttempts in 1..3) { "Download attempts must be between 1 and 3" }
+        require(connectTimeoutSeconds > 0)
+        require(readStallTimeoutSeconds > 0)
+        require(attemptTimeoutSeconds > 0)
         require(record.availabilityStatus == SourceAvailabilityStatus.AVAILABLE)
         val url = requireNotNull(record.downloadUrl)
         require(OfficialSourceUrlPolicy.isAllowed(record.sourceType, url)) {
@@ -213,23 +249,75 @@ class HttpOfficialArtifactDownloader(
         }
         Files.createDirectories(destination.parent)
         Files.deleteIfExists(destination)
-        try {
-            val response = httpClient.send(
-                HttpRequest.newBuilder(URI.create(url))
-                    .header("Accept", "application/octet-stream")
-                    .header("User-Agent", "global-app-compat-assistant-catalog-audit")
-                    .timeout(Duration.ofMinutes(3))
-                    .GET()
-                    .build(),
-                HttpResponse.BodyHandlers.ofFile(destination),
-            )
-            check(response.statusCode() in 200..299) {
-                "Official artifact download returned HTTP ${response.statusCode()}"
+        val temporary = destination.resolveSibling("${destination.fileName}.part")
+        Files.deleteIfExists(temporary)
+        var lastFailure: Exception? = null
+        repeat(maxAttempts) { attempt ->
+            try {
+                Files.deleteIfExists(temporary)
+                val process = ProcessBuilder(
+                    curlExecutable,
+                    "--fail",
+                    "--location",
+                    "--silent",
+                    "--show-error",
+                    "--proto",
+                    "=https",
+                    "--max-redirs",
+                    "5",
+                    "--connect-timeout",
+                    connectTimeoutSeconds.toString(),
+                    "--speed-limit",
+                    "1",
+                    "--speed-time",
+                    readStallTimeoutSeconds.toString(),
+                    "--max-time",
+                    attemptTimeoutSeconds.toString(),
+                    "--header",
+                    "Accept: application/octet-stream",
+                    "--header",
+                    "User-Agent: global-app-compat-assistant-catalog-audit",
+                    "--output",
+                    temporary.toString(),
+                    url,
+                ).redirectErrorStream(true).start()
+                val output = process.inputStream.bufferedReader().use { it.readText() }.trim()
+                val exitCode = process.waitFor()
+                check(exitCode == 0) {
+                    "curl failed with exit code $exitCode: $output"
+                }
+                record.expectedSize?.let { expectedSize ->
+                    val actualSize = Files.size(temporary)
+                    check(actualSize == expectedSize) {
+                        "Incomplete download: received $actualSize bytes, expected $expectedSize"
+                    }
+                }
+                try {
+                    Files.move(
+                        temporary,
+                        destination,
+                        StandardCopyOption.REPLACE_EXISTING,
+                        StandardCopyOption.ATOMIC_MOVE,
+                    )
+                } catch (_: AtomicMoveNotSupportedException) {
+                    Files.move(temporary, destination, StandardCopyOption.REPLACE_EXISTING)
+                }
+                return
+            } catch (failure: Exception) {
+                lastFailure = failure
+                Files.deleteIfExists(temporary)
+                Files.deleteIfExists(destination)
+                if (failure is InterruptedException) {
+                    Thread.currentThread().interrupt()
+                    throw failure
+                }
+                if (attempt + 1 == maxAttempts) return@repeat
             }
-        } catch (failure: Exception) {
-            Files.deleteIfExists(destination)
-            throw failure
         }
+        error(
+            "Official artifact download failed after $maxAttempts attempts: " +
+                (lastFailure?.message ?: "unknown failure"),
+        )
     }
 }
 
@@ -240,11 +328,16 @@ object OfficialSourceUrlPolicy {
         val host = uri.host?.lowercase() ?: return false
         return when (sourceType) {
             ComponentSourceType.OFFICIAL_MICROG_GITHUB ->
-                host == "github.com" && uri.path.startsWith("/microg/GmsCore/releases/download/")
+                (host == "github.com" && uri.path.startsWith("/microg/GmsCore/releases/download/")) ||
+                    (host == "api.github.com" &&
+                        GITHUB_ASSET_API_PATH.matches(uri.path))
             ComponentSourceType.OFFICIAL_MICROG_DOWNLOAD_PAGE -> host == "microg.org"
             ComponentSourceType.OFFICIAL_HUAWEI_APPGALLERY ->
                 host == "appgallery.huawei.com" || host.endsWith(".hicloud.com") ||
                     host.endsWith(".dbankcloud.com")
         }
     }
+
+    private val GITHUB_ASSET_API_PATH =
+        Regex("/repos/microg/GmsCore/releases/assets/\\d+")
 }

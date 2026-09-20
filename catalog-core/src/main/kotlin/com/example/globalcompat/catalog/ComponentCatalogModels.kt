@@ -25,6 +25,7 @@ data class ComponentArtifact(
     val releaseVersion: String,
     val artifactFilename: String?,
     val artifactVersionCode: String?,
+    val githubAssetId: Long? = null,
     val variant: ComponentVariant,
     val sourceType: ComponentSourceType,
     val metadataSource: ComponentSourceType?,
@@ -75,6 +76,8 @@ data class ArtifactDescriptor(
     val artifactFilename: String,
     val artifactVersionCode: String,
     val variant: ComponentVariant,
+    val githubAssetId: Long? = null,
+    val compatibilityStatus: CompatibilityValidationStatus = CompatibilityValidationStatus.UNTESTED,
 )
 
 enum class SourceAvailabilityStatus {
@@ -90,11 +93,12 @@ data class ArtifactSourceRecord(
     val availabilityStatus: SourceAvailabilityStatus,
     val sourcePageUrl: String,
     val downloadUrl: String? = null,
-    val sourceAssetId: String? = null,
+    val sourceAssetId: Long? = null,
     val observedFilename: String? = null,
     val expectedSize: Long? = null,
     val sourceDigest: String? = null,
     val evidence: List<String> = emptyList(),
+    val warningCodes: List<String> = emptyList(),
 )
 
 enum class ComponentVariant {

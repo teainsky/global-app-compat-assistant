@@ -18,7 +18,7 @@ class TrustedComponentCatalogMatcherTest {
 
         assertEquals(
             listOf(
-                "com.google.android.gms-250932032-hw.apk",
+                "com.google.android.gms-252432032-hw.apk",
                 "com.android.vending-84022632-hw.apk",
             ),
             selection.compatibleArtifacts.map { it.artifactFilename },
@@ -180,9 +180,10 @@ class TrustedComponentCatalogMatcherTest {
 
         assertEquals("v0.3.16.252432", release.releaseTag)
         assertEquals("0.3.16.252432", release.releaseVersion)
-        assertEquals("250932032", gmsCore.artifactVersionCode)
-        assertEquals("com.google.android.gms-250932032-hw.apk", gmsCore.artifactFilename)
-        assertFalse(gmsCore.artifactFilename == "com.google.android.gms-252432032-hw.apk")
+        assertEquals("252432032", gmsCore.artifactVersionCode)
+        assertEquals("com.google.android.gms-252432032-hw.apk", gmsCore.artifactFilename)
+        assertFalse(gmsCore.artifactFilename == "com.google.android.gms-250932032-hw.apk")
+        assertEquals(476760666L, gmsCore.githubAssetId)
     }
 
     @Test
@@ -193,6 +194,7 @@ class TrustedComponentCatalogMatcherTest {
                 artifact.releaseVersion,
                 artifact.artifactFilename,
                 artifact.artifactVersionCode,
+                artifact.githubAssetId,
                 artifact.metadataSource?.name,
                 artifact.sourceReleaseUrl,
             )
@@ -203,8 +205,9 @@ class TrustedComponentCatalogMatcherTest {
                 "microg_services_huawei_compatible" to listOf(
                     "com.google.android.gms",
                     "0.3.16.252432",
-                    "com.google.android.gms-250932032-hw.apk",
-                    "250932032",
+                    "com.google.android.gms-252432032-hw.apk",
+                    "252432032",
+                    476760666L,
                     "OFFICIAL_MICROG_GITHUB",
                     OFFICIAL_RELEASE_URL,
                 ),
@@ -213,6 +216,7 @@ class TrustedComponentCatalogMatcherTest {
                     "0.3.16.252432",
                     "com.android.vending-84022632-hw.apk",
                     "84022632",
+                    476761461L,
                     "OFFICIAL_MICROG_GITHUB",
                     OFFICIAL_RELEASE_URL,
                 ),
@@ -229,6 +233,7 @@ class TrustedComponentCatalogMatcherTest {
         val incompleteArtifacts = listOf(
             "artifactFilename" to gmsCore.copy(artifactFilename = null),
             "artifactVersionCode" to gmsCore.copy(artifactVersionCode = null),
+            "githubAssetId" to gmsCore.copy(githubAssetId = null),
             "metadataSource" to gmsCore.copy(metadataSource = null),
             "sourceReleaseUrl" to gmsCore.copy(sourceReleaseUrl = null),
         )
@@ -324,6 +329,10 @@ class TrustedComponentCatalogMatcherTest {
                 artifactVersionCode = when (artifact.packageName) {
                     "com.google.android.gms" -> "250932030"
                     else -> "84022630"
+                },
+                githubAssetId = when (artifact.packageName) {
+                    "com.google.android.gms" -> 404343791L
+                    else -> 404341356L
                 },
                 sourceReleaseUrl =
                     "https://github.com/microg/GmsCore/releases/tag/v0.3.15.250932",

@@ -16,7 +16,7 @@ fun main(args: Array<String>) {
     val github = OfficialGitHubReleaseClient()
     val report = CatalogAuditEngine(
         sourceResolver = OfficialArtifactSourceResolver(github),
-        downloader = HttpOfficialArtifactDownloader(),
+        downloader = CurlOfficialArtifactDownloader(),
         apkInspector = AndroidSdkApkInspector(Path.of(sdkValue)),
     ).audit(releaseTag, outputDirectory)
     AuditReportWriter().write(report, outputDirectory)

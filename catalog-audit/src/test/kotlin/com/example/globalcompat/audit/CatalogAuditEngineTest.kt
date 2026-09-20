@@ -20,10 +20,15 @@ import org.junit.Test
 
 class CatalogAuditEngineTest {
     @Test
-    fun `release notes declaration does not make missing GitHub asset available`() {
+    fun `release notes mismatch warns while API asset remains available`() {
         val resolver = OfficialArtifactSourceResolver(
             github = FakeGitHubClient(
-                release = githubRelease(assets = listOf(githubAsset(VENDING_ASSET_ID, ASSET_VENDING, VENDING_BYTES))),
+                release = githubRelease(
+                    assets = listOf(
+                        githubAsset(GMS_ASSET_ID, ASSET_GMS, GMS_BYTES),
+                        githubAsset(VENDING_ASSET_ID, ASSET_VENDING, VENDING_BYTES),
+                    ),
+                ),
             ),
             pageClient = FakePageClient(downloadPageBody = RELEASE_NOTES),
         )
@@ -32,15 +37,10 @@ class CatalogAuditEngineTest {
         val gmsGitHub = records.single {
             it.componentId == GMS_ID && it.sourceType == ComponentSourceType.OFFICIAL_MICROG_GITHUB
         }
-        val gmsDownloadPage = records.single {
-            it.componentId == GMS_ID &&
-                it.sourceType == ComponentSourceType.OFFICIAL_MICROG_DOWNLOAD_PAGE
-        }
-
-        assertEquals(SourceAvailabilityStatus.MISSING, gmsGitHub.availabilityStatus)
-        assertTrue(gmsGitHub.evidence.any { it.contains("Release notes declare") })
-        assertEquals(SourceAvailabilityStatus.METADATA_ONLY, gmsDownloadPage.availabilityStatus)
-        assertEquals(null, gmsDownloadPage.downloadUrl)
+        assertEquals(SourceAvailabilityStatus.AVAILABLE, gmsGitHub.availabilityStatus)
+        assertEquals(GMS_ASSET_ID, gmsGitHub.sourceAssetId)
+        assertEquals(ASSET_GMS, gmsGitHub.observedFilename)
+        assertEquals(listOf("RELEASE_NOTES_ASSET_MISMATCH"), gmsGitHub.warningCodes)
     }
 
     @Test
@@ -60,7 +60,25 @@ class CatalogAuditEngineTest {
     }
 
     @Test
-    fun `one missing official source does not mean component is unavailable everywhere`() {
+    fun `GitHub asset is selected by one exact asset ID`() {
+        val wrongId = githubAsset(999L, ASSET_GMS, GMS_BYTES)
+        val expected = githubAsset(GMS_ASSET_ID, ASSET_GMS, GMS_BYTES)
+        val resolver = OfficialArtifactSourceResolver(
+            github = FakeGitHubClient(githubRelease(listOf(wrongId, expected))),
+            pageClient = FakePageClient(),
+        )
+
+        val record = resolver.resolve(RELEASE_TAG, descriptors()).single {
+            it.componentId == GMS_ID &&
+                it.sourceType == ComponentSourceType.OFFICIAL_MICROG_GITHUB
+        }
+
+        assertEquals(SourceAvailabilityStatus.AVAILABLE, record.availabilityStatus)
+        assertEquals(GMS_ASSET_ID, record.sourceAssetId)
+    }
+
+    @Test
+    fun `non GitHub source cannot replace missing exact GitHub asset`() {
         val records = sourceRecords(
             gmsGitHub = SourceAvailabilityStatus.MISSING,
             vendingGitHub = SourceAvailabilityStatus.AVAILABLE,
@@ -82,11 +100,8 @@ class CatalogAuditEngineTest {
 
         val report = engine(records = records).audit(RELEASE_TAG, outputDirectory())
 
-        assertEquals(AuditStatus.PASS, report.status)
-        assertEquals(
-            ComponentSourceType.OFFICIAL_HUAWEI_APPGALLERY.name,
-            report.artifacts.single { it.packageName == "com.google.android.gms" }.sourceType,
-        )
+        assertEquals(AuditStatus.FAIL, report.status)
+        assertTrue(report.failures.any { it.code == "SOURCE_METADATA_MISMATCH" })
     }
 
     @Test
@@ -132,8 +147,9 @@ class CatalogAuditEngineTest {
         val report = engine().audit(RELEASE_TAG, outputDirectory())
 
         assertEquals(AuditStatus.PASS, report.status)
-        assertEquals(listOf(ASSET_GMS, ASSET_VENDING), report.artifacts.map { it.artifactFilename })
-        assertEquals(listOf(GMS_ID, VENDING_ID), report.artifacts.map { it.sourceAssetId })
+        assertEquals(listOf(ASSET_GMS, ASSET_VENDING), report.artifacts.map { it.filename })
+        assertEquals(listOf(GMS_ASSET_ID, VENDING_ASSET_ID), report.artifacts.map { it.assetId })
+        assertTrue(report.artifacts.all { it.githubDigestMatches == true })
     }
 
     @Test
@@ -178,6 +194,29 @@ class CatalogAuditEngineTest {
     }
 
     @Test
+    fun `matching GitHub digest records verified local hash`() {
+        val report = engine().audit(RELEASE_TAG, outputDirectory())
+
+        assertEquals(AuditStatus.PASS, report.status)
+        assertTrue(report.artifacts.all { it.githubDigestMatches == true })
+        assertEquals(
+            listOf(sha256(GMS_BYTES), sha256(VENDING_BYTES)),
+            report.artifacts.map { it.locallyCalculatedSha256 },
+        )
+    }
+
+    @Test
+    fun `incomplete download fails closed and is removed`() {
+        val output = outputDirectory()
+        val report = engine(downloader = FakeDownloader(incomplete = true))
+            .audit(RELEASE_TAG, output)
+
+        assertEquals(AuditStatus.FAIL, report.status)
+        assertTrue(report.failures.any { it.code == "DOWNLOADED_SIZE_MISMATCH" })
+        assertFalse(Files.exists(output.resolve("downloads").resolve(ASSET_GMS)))
+    }
+
+    @Test
     fun `APK signature verification failure fails closed`() {
         val report = engine(inspector = FakeApkInspector(signatureVerified = false))
             .audit(RELEASE_TAG, outputDirectory())
@@ -206,6 +245,23 @@ class CatalogAuditEngineTest {
         assertTrue(artifactStatusesBefore.all { it == CompatibilityValidationStatus.UNTESTED })
         assertEquals(releaseStatusBefore, catalogRelease.compatibilityStatus)
         assertEquals(artifactStatusesBefore, catalogRelease.artifacts.map { it.compatibilityStatus })
+        assertTrue(report.artifacts.all {
+            it.compatibilityValidationStatus == CompatibilityValidationStatus.UNTESTED
+        })
+    }
+
+    @Test
+    fun `successful audit writes manifest with untested compatibility`() {
+        val output = outputDirectory()
+        val report = engine().audit(RELEASE_TAG, output)
+
+        AuditReportWriter().write(report, output)
+
+        val manifest = Files.readString(output.resolve("audited-manifest.json"))
+        assertTrue(manifest.contains("\"auditStatus\": \"PASS\""))
+        assertTrue(manifest.contains("\"compatibilityValidationStatus\": \"UNTESTED\""))
+        assertTrue(manifest.contains(GMS_ASSET_ID.toString()))
+        assertTrue(manifest.contains(VENDING_ASSET_ID.toString()))
     }
 
     private fun engine(
@@ -260,7 +316,7 @@ class CatalogAuditEngineTest {
         availabilityStatus = SourceAvailabilityStatus.AVAILABLE,
         sourcePageUrl = RELEASE_URL,
         downloadUrl = downloadUrl,
-        sourceAssetId = componentId,
+        sourceAssetId = assetIdFor(componentId),
         observedFilename = filename,
         expectedSize = bytes.size.toLong(),
         sourceDigest = "sha256:${sha256(bytes)}",
@@ -280,8 +336,9 @@ class CatalogAuditEngineTest {
             "com.google.android.gms",
             "0.3.16.252432",
             ASSET_GMS,
-            "250932032",
+            "252432032",
             ComponentVariant.HUAWEI_HW,
+            GMS_ASSET_ID,
         ),
         ArtifactDescriptor(
             VENDING_ID,
@@ -290,6 +347,7 @@ class CatalogAuditEngineTest {
             ASSET_VENDING,
             "84022632",
             ComponentVariant.HUAWEI_HW,
+            VENDING_ASSET_ID,
         ),
     )
 
@@ -337,16 +395,17 @@ class CatalogAuditEngineTest {
         }
     }
 
-    private class FakeDownloader : OfficialArtifactDownloader {
+    private class FakeDownloader(
+        private val incomplete: Boolean = false,
+    ) : OfficialArtifactDownloader {
         val downloadedUrls = mutableListOf<String>()
 
         override fun download(record: ArtifactSourceRecord, destination: Path) {
             downloadedUrls += requireNotNull(record.downloadUrl)
             Files.createDirectories(destination.parent)
-            Files.write(
-                destination,
-                if (destination.fileName.toString() == ASSET_GMS) GMS_BYTES else VENDING_BYTES,
-            )
+            val bytes =
+                if (destination.fileName.toString() == ASSET_GMS) GMS_BYTES else VENDING_BYTES
+            Files.write(destination, if (incomplete) bytes.copyOf(bytes.size - 1) else bytes)
         }
     }
 
@@ -359,7 +418,7 @@ class CatalogAuditEngineTest {
             return ApkInspection(
                 packageName = packageOverride ?: if (isGms) "com.google.android.gms" else "com.android.vending",
                 versionName = if (isGms) "0.3.16.252432" else "0.1.0",
-                versionCode = if (isGms) "250932032" else "84022632",
+                versionCode = if (isGms) "252432032" else "84022632",
                 signingCertificateSha256 = listOf("certificate-sha256"),
                 signatureVerified = signatureVerified,
                 signatureVerificationOutput = if (signatureVerified) "Verified" else "Failed",
@@ -375,14 +434,17 @@ class CatalogAuditEngineTest {
             "https://github.com/microg/GmsCore/releases/download/v0.3.16.252432"
         const val GMS_ID = "microg_services_huawei_compatible"
         const val VENDING_ID = "microg_companion_huawei_compatible"
-        const val ASSET_GMS = "com.google.android.gms-250932032-hw.apk"
+        const val ASSET_GMS = "com.google.android.gms-252432032-hw.apk"
         const val ASSET_VENDING = "com.android.vending-84022632-hw.apk"
-        const val GMS_ASSET_ID = 1001L
-        const val VENDING_ASSET_ID = 1002L
+        const val GMS_ASSET_ID = 476760666L
+        const val VENDING_ASSET_ID = 476761461L
         const val RELEASE_NOTES =
             "Huawei: com.google.android.gms-250932032-hw.apk and com.android.vending-84022632-hw.apk"
         val GMS_BYTES = "gms-apk-content".toByteArray()
         val VENDING_BYTES = "vending-apk-content".toByteArray()
+
+        fun assetIdFor(componentId: String): Long =
+            if (componentId == GMS_ID) GMS_ASSET_ID else VENDING_ASSET_ID
 
         fun sha256(bytes: ByteArray): String = MessageDigest.getInstance("SHA-256")
             .digest(bytes)

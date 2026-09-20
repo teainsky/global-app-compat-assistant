@@ -1,6 +1,7 @@
 package com.example.globalcompat.audit
 
 import com.example.globalcompat.catalog.ArtifactDescriptor
+import com.example.globalcompat.catalog.ArtifactIntegrityStatus
 import com.example.globalcompat.catalog.ArtifactSourceRecord
 import com.example.globalcompat.catalog.BuiltInComponentCatalog
 import com.example.globalcompat.catalog.ComponentArtifact
@@ -53,6 +54,15 @@ class CatalogAuditEngine(
         }
         val results = mutableListOf<ArtifactAuditResult>()
         val failures = mutableListOf<AuditFailure>()
+        val warnings = sourceRecords.flatMap { record ->
+            record.warningCodes.map { code ->
+                AuditWarning(
+                    code = code,
+                    componentId = record.componentId,
+                    message = "$code for ${record.componentId}; GitHub API asset metadata remains authoritative",
+                )
+            }
+        }.distinct()
         val downloadsDirectory = outputDirectory.resolve("downloads")
 
         descriptors.forEach { descriptor ->
@@ -61,7 +71,9 @@ class CatalogAuditEngine(
                 .filter { it.availabilityStatus == SourceAvailabilityStatus.AVAILABLE }
                 .sortedBy { SOURCE_PRIORITY.indexOf(it.sourceType) }
             val selected = available.firstOrNull { record ->
-                record.observedFilename == descriptor.artifactFilename &&
+                record.sourceType == ComponentSourceType.OFFICIAL_MICROG_GITHUB &&
+                    record.sourceAssetId == descriptor.githubAssetId &&
+                    record.observedFilename == descriptor.artifactFilename &&
                     record.downloadUrl?.let { url ->
                         OfficialSourceUrlPolicy.isAllowed(record.sourceType, url)
                     } == true
@@ -85,13 +97,17 @@ class CatalogAuditEngine(
                 Files.createDirectories(downloadsDirectory)
                 val destination = downloadsDirectory.resolve(descriptor.artifactFilename)
                 downloader.download(selected, destination)
-                results += auditDownloadedArtifact(
-                    releaseTag = releaseTag,
-                    descriptor = descriptor,
-                    sourceRecord = selected,
-                    destination = destination,
-                    auditedAt = auditedAt,
-                )
+                try {
+                    results += auditDownloadedArtifact(
+                        releaseTag = releaseTag,
+                        descriptor = descriptor,
+                        sourceRecord = selected,
+                        destination = destination,
+                        auditedAt = auditedAt,
+                    )
+                } finally {
+                    Files.deleteIfExists(destination)
+                }
             } catch (failure: AuditClosedException) {
                 failures += AuditFailure(failure.code, failure.message.orEmpty())
             } catch (failure: Exception) {
@@ -101,6 +117,7 @@ class CatalogAuditEngine(
                 )
             }
         }
+        runCatching { Files.deleteIfExists(downloadsDirectory) }
 
         return CatalogAuditReport(
             releaseTag = releaseTag,
@@ -111,6 +128,7 @@ class CatalogAuditEngine(
             },
             sourceRecords = sourceRecords,
             artifacts = results,
+            warnings = warnings,
             failures = failures,
             auditedAt = auditedAt,
         )
@@ -136,7 +154,7 @@ class CatalogAuditEngine(
             }
         }
         val sha256 = sha256(destination)
-        validateSourceDigest(sourceRecord, sha256)
+        val githubDigestMatches = validateSourceDigest(sourceRecord, sha256)
         val inspection = apkInspector.inspect(destination)
         if (!inspection.signatureVerified) {
             fail("APK_SIGNATURE_INVALID", "apksigner rejected ${descriptor.artifactFilename}")
@@ -160,19 +178,23 @@ class CatalogAuditEngine(
             )
         }
         return ArtifactAuditResult(
+            componentId = descriptor.componentId,
             releaseTag = releaseTag,
             sourceType = sourceRecord.sourceType.name,
-            sourceAssetId = sourceRecord.sourceAssetId,
-            artifactFilename = descriptor.artifactFilename,
+            filename = descriptor.artifactFilename,
+            assetId = requireNotNull(sourceRecord.sourceAssetId),
+            assetSize = downloadedSize,
             sourceUrl = requireNotNull(sourceRecord.downloadUrl),
-            downloadedSize = downloadedSize,
-            githubAssetDigest = sourceRecord.sourceDigest,
-            sha256 = sha256,
+            githubDigest = sourceRecord.sourceDigest,
+            githubDigestMatches = githubDigestMatches,
+            locallyCalculatedSha256 = sha256,
             packageName = inspection.packageName,
             versionName = inspection.versionName,
             versionCode = inspection.versionCode,
             signingCertificateSha256 = inspection.signingCertificateSha256,
-            apkSignatureVerificationResult = "PASS",
+            apksignerVerificationResult = "PASS",
+            artifactIntegrityStatus = ArtifactIntegrityStatus.SIGNATURE_VERIFIED,
+            compatibilityValidationStatus = descriptor.compatibilityStatus,
             auditedAt = auditedAt,
         )
     }
@@ -180,7 +202,8 @@ class CatalogAuditEngine(
     private fun requireDescriptor(artifact: ComponentArtifact): ArtifactDescriptor {
         val filename = artifact.artifactFilename
         val versionCode = artifact.artifactVersionCode
-        if (filename.isNullOrBlank() || versionCode.isNullOrBlank()) {
+        val githubAssetId = artifact.githubAssetId
+        if (filename.isNullOrBlank() || versionCode.isNullOrBlank() || githubAssetId == null) {
             fail("CATALOG_METADATA_MISSING", "Explicit artifact metadata is required")
         }
         if (Path.of(filename).fileName.toString() != filename) {
@@ -193,11 +216,13 @@ class CatalogAuditEngine(
             artifactFilename = filename,
             artifactVersionCode = versionCode,
             variant = artifact.variant,
+            githubAssetId = githubAssetId,
+            compatibilityStatus = artifact.compatibilityStatus,
         )
     }
 
-    private fun validateSourceDigest(record: ArtifactSourceRecord, localSha256: String) {
-        val digest = record.sourceDigest ?: return
+    private fun validateSourceDigest(record: ArtifactSourceRecord, localSha256: String): Boolean? {
+        val digest = record.sourceDigest ?: return null
         val parts = digest.split(":", limit = 2)
         if (parts.size != 2 || parts[0] != "sha256") {
             fail("ASSET_DIGEST_FORMAT_UNSUPPORTED", "Unsupported source digest: $digest")
@@ -205,6 +230,7 @@ class CatalogAuditEngine(
         if (!parts[1].equals(localSha256, ignoreCase = true)) {
             fail("SHA256_MISMATCH", "${record.observedFilename}: local SHA-256 differs from source digest")
         }
+        return true
     }
 
     private fun sha256(path: Path): String {
@@ -231,6 +257,7 @@ class CatalogAuditEngine(
         status = AuditStatus.FAIL,
         sourceRecords = sourceRecords,
         artifacts = emptyList(),
+        warnings = emptyList(),
         failures = listOf(AuditFailure(code, message)),
         auditedAt = auditedAt,
     )

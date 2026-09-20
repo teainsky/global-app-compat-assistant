@@ -167,7 +167,9 @@ class TrustedComponentCatalogMatcher {
             !artifact.artifactVersionCode.isNullOrBlank() &&
             artifact.metadataSource != null &&
             artifact.metadataSource == artifact.sourceType &&
-            !artifact.sourceReleaseUrl.isNullOrBlank()
+            !artifact.sourceReleaseUrl.isNullOrBlank() &&
+            (artifact.sourceType != ComponentSourceType.OFFICIAL_MICROG_GITHUB ||
+                artifact.githubAssetId != null)
 
     private fun List<ComponentArtifact>.hasRequiredPair(planId: CompatibilityPlanId): Boolean {
         if (planId != CompatibilityPlanId.HUAWEI_MICROG_COMPAT_PLAN) return isNotEmpty()

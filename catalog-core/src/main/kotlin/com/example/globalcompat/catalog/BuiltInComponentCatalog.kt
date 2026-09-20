@@ -34,8 +34,9 @@ object BuiltInComponentCatalog {
                     huaweiArtifact(
                         componentId = "microg_services_huawei_compatible",
                         packageName = "com.google.android.gms",
-                        artifactFilename = "com.google.android.gms-250932032-hw.apk",
-                        artifactVersionCode = "250932032",
+                        artifactFilename = "com.google.android.gms-252432032-hw.apk",
+                        artifactVersionCode = "252432032",
+                        githubAssetId = 476760666L,
                         license = "Apache-2.0",
                     ),
                     huaweiArtifact(
@@ -43,6 +44,7 @@ object BuiltInComponentCatalog {
                         packageName = "com.android.vending",
                         artifactFilename = "com.android.vending-84022632-hw.apk",
                         artifactVersionCode = "84022632",
+                        githubAssetId = 476761461L,
                         license = null,
                     ),
                 ),
@@ -73,6 +75,7 @@ object BuiltInComponentCatalog {
         packageName: String,
         artifactFilename: String,
         artifactVersionCode: String,
+        githubAssetId: Long,
         license: String?,
     ) = ComponentArtifact(
         componentId = componentId,
@@ -80,6 +83,7 @@ object BuiltInComponentCatalog {
         releaseVersion = RELEASE_VERSION,
         artifactFilename = artifactFilename,
         artifactVersionCode = artifactVersionCode,
+        githubAssetId = githubAssetId,
         variant = ComponentVariant.HUAWEI_HW,
         sourceType = ComponentSourceType.OFFICIAL_MICROG_GITHUB,
         metadataSource = ComponentSourceType.OFFICIAL_MICROG_GITHUB,
