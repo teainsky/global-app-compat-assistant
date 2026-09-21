@@ -38,9 +38,16 @@ class DeviceValidationPromotionPolicy {
         if (!functionalValidated) missing += MISSING_FUNCTIONAL_VALIDATION
 
         val artifactEvidence = input.artifactEvidence
-        val trustedArtifactSource =
+        val artifactSourceSupportsVerification = artifactEvidence?.source in setOf(
+            ValidationEvidenceSource.TRUSTED_HOST_AUDIT,
+            ValidationEvidenceSource.ON_DEVICE_READ_ONLY_AUDIT,
+        )
+        val trustedPublishingSource =
             artifactEvidence?.source == ValidationEvidenceSource.TRUSTED_HOST_AUDIT
-        if (!trustedArtifactSource) missing += MISSING_TRUSTED_ARTIFACT_AUDIT
+        if (!artifactSourceSupportsVerification) missing += MISSING_TRUSTED_ARTIFACT_AUDIT
+        if (artifactEvidence?.source == ValidationEvidenceSource.ON_DEVICE_READ_ONLY_AUDIT) {
+            missing += MISSING_TRUSTED_ARTIFACT_AUDIT
+        }
 
         val artifactProfilesMatch = artifactEvidence != null &&
             artifactEvidence.deviceProfile.exactlyMatches(input.deviceProfile) &&
@@ -60,12 +67,14 @@ class DeviceValidationPromotionPolicy {
             blockers += BLOCKER_ARTIFACT_MISMATCH
         }
 
-        val artifactVerified = trustedArtifactSource && artifactProfilesMatch && artifactsMatched
+        val artifactVerified =
+            artifactSourceSupportsVerification && artifactProfilesMatch && artifactsMatched
         val attainedLevel = when {
             !deviceDetected -> null
             !metadataMatched -> DeviceValidationEvidenceLevel.DEVICE_DETECTED
             !functionalValidated -> DeviceValidationEvidenceLevel.COMPONENT_METADATA_MATCHED
             !artifactVerified -> DeviceValidationEvidenceLevel.FUNCTIONALLY_VALIDATED
+            !trustedPublishingSource -> DeviceValidationEvidenceLevel.ARTIFACT_VERIFIED
             blockers.isNotEmpty() -> DeviceValidationEvidenceLevel.ARTIFACT_VERIFIED
             else -> DeviceValidationEvidenceLevel.DEVICE_VERIFIED
         }

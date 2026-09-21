@@ -140,6 +140,23 @@ class DeviceValidationPromotionPolicyTest {
         assertTrue("BLOCKED_VERSION:test" in report.blockers)
     }
 
+    @Test
+    fun `on device read only audit attains artifact verified but cannot publish device verified`() {
+        val report = evaluate(
+            input(
+                artifactEvidence = artifactEvidence(match = true).copy(
+                    source = ValidationEvidenceSource.ON_DEVICE_READ_ONLY_AUDIT,
+                ),
+            ),
+        )
+
+        assertEquals(DeviceValidationEvidenceLevel.ARTIFACT_VERIFIED, report.attainedLevel)
+        assertTrue(
+            DeviceValidationPromotionPolicy.MISSING_TRUSTED_ARTIFACT_AUDIT in
+                report.missingEvidence,
+        )
+    }
+
     private fun evaluate(input: DeviceValidationEvidenceInput) =
         policy.evaluate(input, EVALUATED_AT)
 

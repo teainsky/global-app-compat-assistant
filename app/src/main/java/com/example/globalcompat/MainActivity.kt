@@ -50,6 +50,10 @@ import com.example.globalcompat.baseline.OfficialComponentComparison
 import com.example.globalcompat.baseline.OfficialComponentMatchStatus
 import com.example.globalcompat.baseline.UserFunctionalValidation
 import com.example.globalcompat.baseline.UserValidationAnswer
+import com.example.globalcompat.artifact.AndroidOnDeviceArtifactAuditService
+import com.example.globalcompat.artifact.OnDeviceArtifactAuditAvailability
+import com.example.globalcompat.artifact.OnDeviceArtifactAuditReport
+import com.example.globalcompat.artifact.OnDeviceArtifactReadStatus
 import com.example.globalcompat.catalog.InstalledArtifactSignatureStatus
 import com.example.globalcompat.data.ComponentPresence
 import com.example.globalcompat.data.CompatibilityPlan
@@ -72,6 +76,8 @@ import com.example.globalcompat.simulation.SimulatedInstallationPlan
 import com.example.globalcompat.simulation.SimulationFlowStage
 import com.example.globalcompat.simulation.SimulationNextAction
 import com.example.globalcompat.ui.theme.GlobalCompatTheme
+import com.example.globalcompat.validation.ValidationDeviceProfile
+import com.example.globalcompat.validation.ValidationSystemProfile
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -98,11 +104,16 @@ private fun ScannerScreen(scanner: DeviceBaselineScanner) {
     var preparationProgress by remember { mutableStateOf<EnvironmentPreparationProgress?>(null) }
     var preparationResult by remember { mutableStateOf<EnvironmentPreparationResult?>(null) }
     var activePreparation by remember { mutableStateOf<PreparationCancellation?>(null) }
+    var artifactAuditReport by remember { mutableStateOf<OnDeviceArtifactAuditReport?>(null) }
+    var isAuditingInstalledArtifacts by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
     val reportFactory = remember { DeviceBaselineReportFactory() }
     val preparationService = remember(context.applicationContext) {
         AndroidEnvironmentPreparationService(context.applicationContext)
+    }
+    val artifactAuditService = remember(context.applicationContext) {
+        AndroidOnDeviceArtifactAuditService(context.applicationContext)
     }
     DisposableEffect(Unit) {
         onDispose { activePreparation?.cancel() }
@@ -141,6 +152,8 @@ private fun ScannerScreen(scanner: DeviceBaselineScanner) {
                     activePreparation = null
                     preparationProgress = null
                     preparationResult = null
+                    artifactAuditReport = null
+                    isAuditingInstalledArtifacts = false
                     isScanning = true
                     scope.launch {
                         scanResult = withContext(Dispatchers.IO) { scanner.scan() }
@@ -188,6 +201,30 @@ private fun ScannerScreen(scanner: DeviceBaselineScanner) {
                     }
                 },
                 onCancelPreparation = { activePreparation?.cancel() },
+                artifactAuditReport = artifactAuditReport,
+                isAuditingInstalledArtifacts = isAuditingInstalledArtifacts,
+                onAuditInstalledArtifacts = {
+                    val result = checkNotNull(scanResult)
+                    isAuditingInstalledArtifacts = true
+                    scope.launch {
+                        artifactAuditReport = withContext(Dispatchers.IO) {
+                            artifactAuditService.audit(
+                                deviceProfile = ValidationDeviceProfile(
+                                    manufacturer = result.environment.device.manufacturer,
+                                    model = result.environment.device.model,
+                                ),
+                                systemProfile = ValidationSystemProfile(
+                                    harmonyOsVersion = result.environment.rom.version,
+                                    androidVersion = result.environment.android.release,
+                                    androidApiLevel = result.environment.android.apiLevel,
+                                    romFamily = result.environment.rom.family.name,
+                                    romVersion = result.environment.rom.version,
+                                ),
+                            )
+                        }
+                        isAuditingInstalledArtifacts = false
+                    }
+                },
                 onExport = {
                     val result = checkNotNull(scanResult)
                     val baseline = reportFactory.create(
@@ -259,6 +296,9 @@ private fun EnvironmentReportView(
     preparationResult: EnvironmentPreparationResult?,
     onPrepareEnvironment: () -> Unit,
     onCancelPreparation: () -> Unit,
+    artifactAuditReport: OnDeviceArtifactAuditReport?,
+    isAuditingInstalledArtifacts: Boolean,
+    onAuditInstalledArtifacts: () -> Unit,
     onExport: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -354,6 +394,13 @@ private fun EnvironmentReportView(
             ComponentFingerprintCard(comparison)
         }
         item {
+            OnDeviceArtifactAuditCard(
+                report = artifactAuditReport,
+                isAuditing = isAuditingInstalledArtifacts,
+                onAudit = onAuditInstalledArtifacts,
+            )
+        }
+        item {
             UserValidationSection(
                 validation = functionalValidation,
                 onChange = onFunctionalValidationChange,
@@ -361,6 +408,95 @@ private fun EnvironmentReportView(
                 onExport = onExport,
             )
         }
+    }
+}
+
+@Composable
+private fun OnDeviceArtifactAuditCard(
+    report: OnDeviceArtifactAuditReport?,
+    isAuditing: Boolean,
+    onAudit: () -> Unit,
+) {
+    var showTechnicalDetails by remember(report) { mutableStateOf(false) }
+    val statusMessage = when (report?.availability) {
+        OnDeviceArtifactAuditAvailability.ON_DEVICE_ARTIFACT_AUDIT_SUPPORTED ->
+            if (report.attainedEvidenceLevel != null) {
+                "已读取本机组件原文件，并与官方审计记录一致"
+            } else {
+                "已读取本机组件原文件，但未完全匹配官方记录"
+            }
+        OnDeviceArtifactAuditAvailability.PARTIALLY_SUPPORTED ->
+            "系统只允许读取部分组件，未生成完整原文件证据"
+        OnDeviceArtifactAuditAvailability.NOT_ACCESSIBLE ->
+            "系统不允许读取已安装组件原文件"
+        null -> "无需连接电脑，尝试只读核对本机已安装组件原文件。"
+    }
+    ReportSection("本机原文件审计") {
+        Text(statusMessage, style = MaterialTheme.typography.bodyMedium)
+        if (isAuditing) {
+            LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+            Text("正在读取并计算文件摘要…", style = MaterialTheme.typography.bodySmall)
+        } else {
+            OutlinedButton(
+                modifier = Modifier.fillMaxWidth(),
+                onClick = onAudit,
+            ) {
+                Text(if (report == null) "开始只读审计" else "重新审计")
+            }
+        }
+        report?.components?.forEach { component ->
+            val componentName = when (component.packageName) {
+                "com.google.android.gms" -> "服务组件"
+                "com.android.vending" -> "配套组件"
+                else -> "组件"
+            }
+            val resultText = when {
+                component.officialArtifactMatched -> "官方原文件一致"
+                component.readStatus == OnDeviceArtifactReadStatus.APK_FILE_NOT_READABLE ->
+                    "原文件不可访问"
+                component.readStatus == OnDeviceArtifactReadStatus.SPLIT_APK_LAYOUT_UNSUPPORTED ->
+                    "检测到拆分安装，暂不能完整验证"
+                component.readStatus == OnDeviceArtifactReadStatus.NOT_INSTALLED -> "未安装"
+                else -> "未通过官方原文件核对"
+            }
+            Text("• $componentName：$resultText", style = MaterialTheme.typography.bodyMedium)
+        }
+        if (report?.attainedEvidenceLevel != null) {
+            Text(
+                "原文件证据等级：${report.attainedEvidenceLevel.name}；不会自动提升为 DEVICE_VERIFIED。",
+                style = MaterialTheme.typography.bodySmall,
+            )
+        }
+        if (report != null) {
+            TextButton(onClick = { showTechnicalDetails = !showTechnicalDetails }) {
+                Text(if (showTechnicalDetails) "收起技术详情" else "查看技术详情")
+            }
+        }
+        if (showTechnicalDetails) {
+            report?.components?.forEach { component ->
+                Text(
+                    "${component.packageName} · ${component.readStatus.name}",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                component.installedApkSha256?.let {
+                    ReportRow("本机 APK SHA-256", it)
+                }
+                component.officialApkSha256?.let {
+                    ReportRow("官方 APK SHA-256", it)
+                }
+                if (component.reportedSigningCertificateSha256.isNotEmpty()) {
+                    ReportRow(
+                        "系统报告签名",
+                        component.reportedSigningCertificateSha256.joinToString(),
+                    )
+                }
+                component.failureType?.let { ReportRow("读取失败类型", it) }
+            }
+        }
+        Text(
+            "该功能不申请新权限、不使用 Root/Shizuku，也不会修改已安装组件。",
+            style = MaterialTheme.typography.bodySmall,
+        )
     }
 }
 

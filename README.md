@@ -10,6 +10,8 @@ Android 原生应用，Kotlin + Jetpack Compose。
 
 当前 Huawei catalog 仍为 `CANDIDATE/UNTESTED`，因此真实设备上的安装入口保持禁用，不会触发安装。应用不依赖 GMS 启动，不请求 `QUERY_ALL_PACKAGES`，不静默安装、不自动卸载、不读取账号内容或设备唯一标识、不上传报告，也不包含支付、登录操作、官网、VPN、代理或 AI API 能力。
 
+报告页还提供无 ADB 的本机原文件审计：仅对清单中明确可见的两个组件读取 `ApplicationInfo.sourceDir`，尝试计算已安装 base APK 的 SHA-256，并结合包名、版本和系统报告签名与官方审计数据比较。该能力不新增权限；若 OEM 的文件权限或 SELinux 阻止读取，应用会返回 `NOT_ACCESSIBLE`，不会尝试绕过。设备内证据最高只到 `ARTIFACT_VERIFIED`，不能自行发布 `DEVICE_VERIFIED`。
+
 首台目标验收设备：Huawei Pura 70 Pro+ / HarmonyOS 4.2。
 
 ## 验证
