@@ -1,13 +1,10 @@
 package com.example.globalcompat.installation
 
-import com.example.globalcompat.catalog.ArtifactIntegrityStatus
 import com.example.globalcompat.catalog.ArtifactSourceRecord
 import com.example.globalcompat.catalog.BuiltInComponentCatalog
-import com.example.globalcompat.catalog.CompatibilityValidationStatus
 import com.example.globalcompat.catalog.ComponentArtifact
 import com.example.globalcompat.catalog.ComponentCatalog
 import com.example.globalcompat.catalog.ComponentRelease
-import com.example.globalcompat.catalog.SourceAvailabilityStatus
 import com.example.globalcompat.data.CompatibilityPlanId
 import com.example.globalcompat.data.DeviceCategory
 import com.example.globalcompat.simulation.CurrentComponentState
@@ -20,11 +17,14 @@ import com.example.globalcompat.simulation.SimulationPlanStatus
 class InstallationExecutionGate(
     private val catalog: ComponentCatalog = BuiltInComponentCatalog.catalog,
 ) {
+    private val gatePolicy = catalog.installationGatePolicy
+
     fun evaluate(
         simulatedPlan: SimulatedInstallationPlan,
         verificationResults: Map<String, ArtifactVerificationResult> = emptyMap(),
     ): InstallationSessionPlan {
-        if (simulatedPlan.deviceCategory == DeviceCategory.HARMONYOS_5_PLUS ||
+        if ((gatePolicy.blockHarmonyOs5PlusLegacyPlan &&
+                simulatedPlan.deviceCategory == DeviceCategory.HARMONYOS_5_PLUS) ||
             simulatedPlan.nextAction == SimulationNextAction.STOP_UNSUPPORTED_SYSTEM
         ) {
             return blockedPlan(
@@ -173,17 +173,17 @@ class InstallationExecutionGate(
         val source = exactOfficialSource(artifact)
         val reasons = mutableListOf<InstallationBlockReason>()
         if (source == null) reasons += InstallationBlockReason.OFFICIAL_SOURCE_UNAVAILABLE
-        if (!artifact.sha256.isSha256()) {
+        if (gatePolicy.requireSha256 && !artifact.sha256.isSha256()) {
             reasons += InstallationBlockReason.SHA256_NOT_AUDITED
         }
-        if (!artifact.signingCertificateDigest.isSha256()) {
+        if (gatePolicy.requireSigningCertificate && !artifact.signingCertificateDigest.isSha256()) {
             reasons += InstallationBlockReason.SIGNATURE_NOT_AUDITED
         }
-        if (artifact.integrityStatus != ArtifactIntegrityStatus.SIGNATURE_VERIFIED) {
+        if (artifact.integrityStatus != gatePolicy.requiredIntegrityStatus) {
             reasons += InstallationBlockReason.ARTIFACT_INTEGRITY_NOT_SIGNATURE_VERIFIED
         }
-        if (release.compatibilityStatus != CompatibilityValidationStatus.DEVICE_VERIFIED ||
-            artifact.compatibilityStatus != CompatibilityValidationStatus.DEVICE_VERIFIED
+        if (release.compatibilityStatus != gatePolicy.requiredCompatibilityStatus ||
+            artifact.compatibilityStatus != gatePolicy.requiredCompatibilityStatus
         ) {
             reasons += InstallationBlockReason.COMPATIBILITY_NOT_DEVICE_VERIFIED
         }
@@ -222,7 +222,7 @@ class InstallationExecutionGate(
             source.componentId == artifact.componentId &&
                 source.sourceType == artifact.sourceType &&
                 source.sourceType in catalog.verificationPolicy.allowedSourceTypes &&
-                source.availabilityStatus == SourceAvailabilityStatus.AVAILABLE &&
+                source.availabilityStatus == gatePolicy.requiredSourceAvailability &&
                 source.sourceAssetId == artifact.githubAssetId &&
                 source.observedFilename == artifact.artifactFilename &&
                 source.sourceDigest?.substringAfter("sha256:", "")?.normalizeDigest() ==
@@ -277,11 +277,12 @@ class InstallationExecutionGate(
         ) {
             add(InstallationBlockReason.SIGNATURE_MISMATCH)
         }
-        if (verification.packageName != request.packageName) {
+        if (gatePolicy.requirePackageNameMatch && verification.packageName != request.packageName) {
             add(InstallationBlockReason.PACKAGE_NAME_MISMATCH)
         }
-        if (verification.versionCode != request.artifactVersionCode ||
-            verification.versionName != request.artifactVersionName
+        if (gatePolicy.requireVersionMatch &&
+            (verification.versionCode != request.artifactVersionCode ||
+                verification.versionName != request.artifactVersionName)
         ) {
             add(InstallationBlockReason.VERSION_MISMATCH)
         }
@@ -290,7 +291,7 @@ class InstallationExecutionGate(
     private fun branchBlockReason(
         simulatedPlan: SimulatedInstallationPlan,
     ): InstallationBlockReason? = when {
-        simulatedPlan.deviceCategory != DeviceCategory.HUAWEI_HARMONY_ANDROID_COMPAT ||
+        simulatedPlan.deviceCategory !in gatePolicy.allowedDeviceCategories ||
             simulatedPlan.compatibilityPlanId != CompatibilityPlanId.HUAWEI_MICROG_COMPAT_PLAN ->
             InstallationBlockReason.DEVICE_BRANCH_NOT_ALLOWED
         else -> null
@@ -381,12 +382,12 @@ class InstallationExecutionGate(
         }
         val isDeviceVerified = matchingReleases.size == 1 &&
             matchingReleases.single().compatibilityStatus ==
-            CompatibilityValidationStatus.DEVICE_VERIFIED &&
+            gatePolicy.requiredCompatibilityStatus &&
             matchingReleases.single().artifacts
                 .filter { it.componentId in selectedIds }
                 .let { artifacts ->
                     artifacts.size == selectedIds.size && artifacts.all {
-                        it.compatibilityStatus == CompatibilityValidationStatus.DEVICE_VERIFIED
+                        it.compatibilityStatus == gatePolicy.requiredCompatibilityStatus
                     }
                 }
         return if (isDeviceVerified) {

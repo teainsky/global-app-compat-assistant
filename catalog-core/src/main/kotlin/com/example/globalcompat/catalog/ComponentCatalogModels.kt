@@ -2,12 +2,76 @@ package com.example.globalcompat.catalog
 
 import com.example.globalcompat.data.CompatibilityPlanId
 import com.example.globalcompat.data.DeviceCategory
+import com.google.gson.annotations.SerializedName
 
 data class ComponentCatalog(
     val schemaVersion: Int,
+    @SerializedName("componentReleases")
     val releases: List<ComponentRelease>,
     val verificationPolicy: VerificationPolicy,
     val sourceRecords: List<ArtifactSourceRecord> = emptyList(),
+    val catalogVersion: Long = 1L,
+    val publishedAt: String = "",
+    val minClientVersion: Long = 1L,
+    val deviceRules: List<DeviceClassificationRule> = emptyList(),
+    val compatibilityRecords: List<CatalogCompatibilityRecord> = emptyList(),
+    val blockedVersions: List<BlockedVersionRule> = emptyList(),
+    val warnings: List<CatalogWarning> = emptyList(),
+    val installationGatePolicy: InstallationGatePolicy = InstallationGatePolicy(),
+)
+
+data class DeviceClassificationRule(
+    val ruleId: String,
+    val manufacturers: Set<String>,
+    val romFamilies: Set<String>,
+    val minSystemMajor: Int?,
+    val maxSystemMajor: Int?,
+    val deviceCategory: DeviceCategory,
+    val planId: CompatibilityPlanId,
+    val installWorkflowAllowed: Boolean,
+)
+
+enum class CompatibilityEvidenceAuthority {
+    MAINTAINER_SIGNED,
+    TRUSTED_DEVICE_LAB,
+    USER_FEEDBACK,
+}
+
+data class CatalogCompatibilityRecord(
+    val releaseId: String,
+    val componentId: String?,
+    val status: CompatibilityValidationStatus,
+    val authority: CompatibilityEvidenceAuthority,
+    val verifiedDeviceFamilies: List<String>,
+    val verifiedSystemVersions: List<String>,
+)
+
+data class BlockedVersionRule(
+    val componentId: String,
+    val versions: Set<String>,
+    val reason: String,
+)
+
+data class CatalogWarning(
+    val code: String,
+    val message: String,
+)
+
+data class InstallationGatePolicy(
+    val allowedDeviceCategories: Set<DeviceCategory> = setOf(
+        DeviceCategory.HUAWEI_HARMONY_ANDROID_COMPAT,
+    ),
+    val requiredSourceAvailability: SourceAvailabilityStatus =
+        SourceAvailabilityStatus.AVAILABLE,
+    val requiredIntegrityStatus: ArtifactIntegrityStatus =
+        ArtifactIntegrityStatus.SIGNATURE_VERIFIED,
+    val requiredCompatibilityStatus: CompatibilityValidationStatus =
+        CompatibilityValidationStatus.DEVICE_VERIFIED,
+    val requireSha256: Boolean = true,
+    val requireSigningCertificate: Boolean = true,
+    val requirePackageNameMatch: Boolean = true,
+    val requireVersionMatch: Boolean = true,
+    val blockHarmonyOs5PlusLegacyPlan: Boolean = true,
 )
 
 data class ComponentRelease(
@@ -37,6 +101,7 @@ data class ComponentArtifact(
     val minSystemVersion: String,
     val maxSystemVersion: String,
     val verifiedDeviceFamilies: List<String>,
+    val verifiedSystemVersions: List<String> = emptyList(),
     val blockedDeviceFamilies: List<String>,
     val blockedSystemVersions: List<String>,
     val integrityStatus: ArtifactIntegrityStatus,

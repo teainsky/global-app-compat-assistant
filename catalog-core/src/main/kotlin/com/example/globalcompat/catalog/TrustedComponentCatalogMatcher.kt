@@ -49,15 +49,16 @@ class TrustedComponentCatalogMatcher {
             release.compatibilityStatus != CompatibilityValidationStatus.BLOCKED &&
                 release.compatibilityStatus != CompatibilityValidationStatus.DEPRECATED &&
                 release.compatibility.matches(request, requiredVariant) &&
-                release.eligibleArtifacts(policy, requiredVariant, request).hasRequiredPair(request.planId)
+                release.eligibleArtifacts(catalog, policy, requiredVariant, request)
+                    .hasRequiredPair(request.planId)
         }
         val compatibleArtifacts = compatibleReleases.flatMap { release ->
-            release.eligibleArtifacts(policy, requiredVariant, request)
+            release.eligibleArtifacts(catalog, policy, requiredVariant, request)
         }
         val recommendedRelease = compatibleReleases
             .filter { release ->
                 release.compatibilityStatus in policy.recommendableCompatibilityStatuses &&
-                    release.eligibleArtifacts(policy, requiredVariant, request).all {
+                    release.eligibleArtifacts(catalog, policy, requiredVariant, request).all {
                         it.compatibilityStatus in policy.recommendableCompatibilityStatuses
                     }
             }
@@ -66,7 +67,7 @@ class TrustedComponentCatalogMatcher {
                     .thenBy { it.releaseTag },
             )
         val recommendedArtifacts = recommendedRelease
-            ?.eligibleArtifacts(policy, requiredVariant, request)
+            ?.eligibleArtifacts(catalog, policy, requiredVariant, request)
             .orEmpty()
         val installableArtifacts = recommendedArtifacts.takeIf { artifacts ->
             artifacts.isNotEmpty() && artifacts.all { artifact ->
@@ -142,6 +143,7 @@ class TrustedComponentCatalogMatcher {
     }
 
     private fun ComponentRelease.eligibleArtifacts(
+        catalog: ComponentCatalog,
         policy: VerificationPolicy,
         requiredVariant: ComponentVariant,
         request: CatalogMatchRequest,
@@ -153,11 +155,22 @@ class TrustedComponentCatalogMatcher {
             artifact.integrityStatus != ArtifactIntegrityStatus.FAILED &&
             artifact.compatibilityStatus != CompatibilityValidationStatus.BLOCKED &&
             artifact.compatibilityStatus != CompatibilityValidationStatus.DEPRECATED &&
+            !catalog.isBlocked(artifact) &&
             (artifact.verifiedDeviceFamilies.isEmpty() ||
                 request.deviceFamily in artifact.verifiedDeviceFamilies) &&
+            (artifact.verifiedSystemVersions.isEmpty() ||
+                request.systemVersion in artifact.verifiedSystemVersions) &&
             request.deviceFamily !in artifact.blockedDeviceFamilies &&
             request.systemVersion !in artifact.blockedSystemVersions
     }
+
+    private fun ComponentCatalog.isBlocked(artifact: ComponentArtifact): Boolean =
+        blockedVersions.any { rule ->
+            rule.componentId == artifact.componentId &&
+                (artifact.releaseVersion in rule.versions ||
+                    artifact.artifactVersionCode in rule.versions ||
+                    artifact.artifactVersionName in rule.versions)
+        }
 
     private fun ComponentRelease.hasExplicitMetadataFor(artifact: ComponentArtifact): Boolean =
         releaseTag.isNotBlank() &&

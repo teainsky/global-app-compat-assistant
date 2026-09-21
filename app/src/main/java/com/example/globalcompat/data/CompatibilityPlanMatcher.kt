@@ -1,10 +1,16 @@
 package com.example.globalcompat.data
 
+import com.example.globalcompat.catalog.BuiltInComponentCatalog
+import com.example.globalcompat.catalog.DeviceClassificationRule
+
 fun interface CompatibilityPlanMatcher {
     fun match(context: CompatibilityContext): CompatibilityPlan
 }
 
-class RuleBasedCompatibilityPlanMatcher : CompatibilityPlanMatcher {
+class RuleBasedCompatibilityPlanMatcher(
+    private val deviceRules: List<DeviceClassificationRule> =
+        BuiltInComponentCatalog.catalog.deviceRules,
+) : CompatibilityPlanMatcher {
     override fun match(context: CompatibilityContext): CompatibilityPlan {
         val baseEvidence = buildList {
             add(
@@ -33,7 +39,9 @@ class RuleBasedCompatibilityPlanMatcher : CompatibilityPlanMatcher {
             addAll(context.components.map(::componentEvidence))
         }
 
-        if (isHarmonyOs5Plus(context.rom)) {
+        val matchedDeviceRule = matchingDeviceRule(context)
+
+        if (matchedDeviceRule?.deviceCategory == DeviceCategory.HARMONYOS_5_PLUS) {
             return plan(
                 category = DeviceCategory.HARMONYOS_5_PLUS,
                 planId = CompatibilityPlanId.UNSUPPORTED_OR_UNKNOWN,
@@ -70,7 +78,7 @@ class RuleBasedCompatibilityPlanMatcher : CompatibilityPlanMatcher {
         val hasPlayServices = playServices.isUsable()
         val hasPlayStore = playStore.isUsable()
 
-        if (isHuaweiHarmonyAndroidCompat(context)) {
+        if (matchedDeviceRule?.deviceCategory == DeviceCategory.HUAWEI_HARMONY_ANDROID_COMPAT) {
             val partialWarning = if (hasPlayServices || hasPlayStore) {
                 listOf(
                     warning(
@@ -137,7 +145,7 @@ class RuleBasedCompatibilityPlanMatcher : CompatibilityPlanMatcher {
             )
         }
 
-        if (context.rom.family in CHINA_ANDROID_ROM_FAMILIES) {
+        if (matchedDeviceRule?.deviceCategory == DeviceCategory.CHINA_ANDROID_NO_GMS) {
             return plan(
                 category = DeviceCategory.CHINA_ANDROID_NO_GMS,
                 planId = CompatibilityPlanId.GMS_REPAIR_REQUIRED,
@@ -174,18 +182,22 @@ class RuleBasedCompatibilityPlanMatcher : CompatibilityPlanMatcher {
         )
     }
 
-    private fun isHarmonyOs5Plus(rom: RomIdentification): Boolean {
-        if (rom.family == RomFamily.HARMONY_OS_5_PLUS) return true
-        if (rom.family != RomFamily.HARMONY_OS) return false
-        return rom.version.majorVersion()?.let { it >= HARMONY_5_PLUS_MAJOR_VERSION } == true
-    }
-
-    private fun isHuaweiHarmonyAndroidCompat(context: CompatibilityContext): Boolean {
-        if (context.rom.family != RomFamily.HARMONY_OS) return false
-        val isHuawei = context.device.manufacturer.equals("HUAWEI", ignoreCase = true) ||
-            context.device.brand.equals("HUAWEI", ignoreCase = true)
-        val majorVersion = context.rom.version.majorVersion() ?: return false
-        return isHuawei && majorVersion in 1..HARMONY_ANDROID_COMPAT_MAX_MAJOR_VERSION
+    private fun matchingDeviceRule(context: CompatibilityContext): DeviceClassificationRule? {
+        val manufacturerValues = setOf(context.device.manufacturer, context.device.brand)
+            .map { it.uppercase() }
+            .toSet()
+        val systemMajor = context.rom.version.majorVersion()
+        return deviceRules.firstOrNull { rule ->
+            val minSystemMajor = rule.minSystemMajor
+            val maxSystemMajor = rule.maxSystemMajor
+            (rule.manufacturers.isEmpty() ||
+                rule.manufacturers.any { it.uppercase() in manufacturerValues }) &&
+                context.rom.family.name in rule.romFamilies &&
+                (minSystemMajor == null ||
+                    systemMajor != null && systemMajor >= minSystemMajor) &&
+                (maxSystemMajor == null ||
+                    systemMajor != null && systemMajor <= maxSystemMajor)
+        }
     }
 
     private fun String?.majorVersion(): Int? = this
@@ -250,16 +262,7 @@ class RuleBasedCompatibilityPlanMatcher : CompatibilityPlanMatcher {
     ) = CompatibilityWarning(code = code, message = message)
 
     private companion object {
-        const val HARMONY_ANDROID_COMPAT_MAX_MAJOR_VERSION = 4
-        const val HARMONY_5_PLUS_MAJOR_VERSION = 5
         val VERSION_NUMBER = Regex("\\d+")
-
-        val CHINA_ANDROID_ROM_FAMILIES = setOf(
-            RomFamily.HYPER_OS,
-            RomFamily.COLOR_OS,
-            RomFamily.ORIGIN_OS,
-            RomFamily.MAGIC_OS,
-        )
 
         val GOOGLE_PLAY_SERVICES_REQUIREMENT = RequiredCompatibilityComponent(
             componentId = "google_play_services",
