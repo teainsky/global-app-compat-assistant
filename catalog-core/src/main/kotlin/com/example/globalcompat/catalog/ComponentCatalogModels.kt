@@ -7,6 +7,7 @@ data class ComponentCatalog(
     val schemaVersion: Int,
     val releases: List<ComponentRelease>,
     val verificationPolicy: VerificationPolicy,
+    val sourceRecords: List<ArtifactSourceRecord> = emptyList(),
 )
 
 data class ComponentRelease(

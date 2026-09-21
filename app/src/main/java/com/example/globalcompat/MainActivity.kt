@@ -53,6 +53,11 @@ import com.example.globalcompat.data.ComponentPresence
 import com.example.globalcompat.data.CompatibilityPlan
 import com.example.globalcompat.data.CompatibilityPlanId
 import com.example.globalcompat.data.SystemComponent
+import com.example.globalcompat.simulation.CurrentComponentState
+import com.example.globalcompat.simulation.SimulatedInstallAction
+import com.example.globalcompat.simulation.SimulatedInstallationPlan
+import com.example.globalcompat.simulation.SimulationFlowStage
+import com.example.globalcompat.simulation.SimulationNextAction
 import com.example.globalcompat.ui.theme.GlobalCompatTheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -259,6 +264,9 @@ private fun EnvironmentReportView(
             CompatibilityPlanCard(report.compatibilityPlan)
         }
         item {
+            SimulatedInstallationPlanCard(scanResult.simulatedInstallationPlan)
+        }
+        item {
             Text(
                 text = "官方组件指纹比对",
                 style = MaterialTheme.typography.titleMedium,
@@ -328,6 +336,98 @@ private fun CompatibilityPlanCard(plan: CompatibilityPlan) {
             }
         }
     }
+}
+
+@Composable
+private fun SimulatedInstallationPlanCard(plan: SimulatedInstallationPlan) {
+    var showTechnicalFlow by remember(plan) { mutableStateOf(false) }
+    val userMessage = when (plan.nextAction) {
+        SimulationNextAction.NO_ACTION_REQUIRED -> "已经装好，不需要处理"
+        SimulationNextAction.REVIEW_SIMULATED_STEPS -> "模拟计划已生成"
+        SimulationNextAction.VERIFY_CURRENT_ARTIFACT -> "需要先验证当前组件原文件"
+        SimulationNextAction.STOP_SIGNATURE_MISMATCH -> "检测到签名异常，已停止"
+        SimulationNextAction.STOP_UNSUPPORTED_SYSTEM -> "当前系统不适用此方案"
+        SimulationNextAction.STOP_OFFICIAL_COMPONENT_UNAVAILABLE ->
+            "官方组件当前不可取得，已安全停止"
+        SimulationNextAction.STOP_INTEGRITY_EVIDENCE_INCOMPLETE ->
+            "官方组件完整性证据不足，已安全停止"
+        SimulationNextAction.STOP_INSUFFICIENT_EVIDENCE -> "证据不足，已安全停止"
+    }
+
+    ReportSection("模拟安装计划") {
+        Text(
+            text = userMessage,
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.SemiBold,
+        )
+        Text(
+            text = "仅展示未来流程，不会下载、安装、卸载或修改系统。",
+            style = MaterialTheme.typography.bodySmall,
+        )
+        plan.selectedReleaseTag?.let { ReportRow("官方候选版本", it) }
+        if (plan.currentComponents.isNotEmpty()) {
+            Text("当前组件状态", style = MaterialTheme.typography.labelMedium)
+            plan.currentComponents.forEach { component ->
+                val state = when (component.state) {
+                    CurrentComponentState.OFFICIAL_ARTIFACT_MATCH -> "官方原文件匹配"
+                    CurrentComponentState.COMPATIBILITY_SIGNATURE_REPORTED -> "系统报告兼容签名"
+                    CurrentComponentState.NOT_INSTALLED -> "未安装"
+                    CurrentComponentState.VERSION_MISMATCH -> "版本不匹配"
+                    CurrentComponentState.SIGNATURE_MISMATCH -> "签名异常"
+                    CurrentComponentState.UNREADABLE -> "无法读取"
+                    CurrentComponentState.UNKNOWN -> "无法判断"
+                }
+                Text(
+                    text = "• ${component.packageName}：$state",
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            }
+        }
+        if (plan.installationOrder.isNotEmpty()) {
+            Text("未来操作顺序（模拟）", style = MaterialTheme.typography.labelMedium)
+            plan.installationOrder.forEach { step ->
+                val action = when (step.action) {
+                    SimulatedInstallAction.INSTALL -> "安装"
+                    SimulatedInstallAction.REPLACE_VERSION -> "替换不匹配版本"
+                }
+                Text(
+                    text = "${step.order}. $action ${step.artifactFilename}",
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            }
+        }
+        plan.warnings.forEach { warning ->
+            Text("• $warning", style = MaterialTheme.typography.bodySmall)
+        }
+        TextButton(onClick = { showTechnicalFlow = !showTechnicalFlow }) {
+            Text(if (showTechnicalFlow) "收起流程证据" else "查看完整流程")
+        }
+        if (showTechnicalFlow) {
+            plan.stages.forEach { flow ->
+                Text(
+                    text = "${flow.stage.userLabel()} · ${flow.status.name}：${flow.message}",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+            plan.selectedArtifacts.forEach { artifact ->
+                Text(
+                    text = "${artifact.artifactFilename} · ${artifact.sourceAvailability.name} · " +
+                        "${artifact.integrityStatus.name} · ${artifact.compatibilityStatus.name}",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+        }
+    }
+}
+
+private fun SimulationFlowStage.userLabel(): String = when (this) {
+    SimulationFlowStage.DEVICE_DETECTION -> "检测设备"
+    SimulationFlowStage.PLAN_MATCHING -> "匹配方案"
+    SimulationFlowStage.OFFICIAL_COMPONENT_SELECTION -> "选择官方两件套"
+    SimulationFlowStage.INTEGRITY_CHECK -> "校验完整性证据"
+    SimulationFlowStage.CURRENT_COMPONENT_ASSESSMENT -> "判断当前组件"
+    SimulationFlowStage.INSTALLATION_ORDER -> "计算安装顺序"
+    SimulationFlowStage.NEXT_ACTION -> "输出下一步动作"
 }
 
 @Composable

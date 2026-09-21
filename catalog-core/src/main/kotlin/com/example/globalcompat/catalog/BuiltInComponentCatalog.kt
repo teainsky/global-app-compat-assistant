@@ -72,6 +72,44 @@ object BuiltInComponentCatalog {
             requireSha256ForDownloadVerification = true,
             requireSigningCertificateForDownloadVerification = true,
         ),
+        sourceRecords = listOf(
+            officialGitHubSource(
+                componentId = "microg_services_huawei_compatible",
+                artifactFilename = "com.google.android.gms-252432032-hw.apk",
+                githubAssetId = 476760666L,
+                sha256 = "a44ce933e2336d3340eb82ad3bb28bba03bc56a7b3cf3c98250a225c55b572de",
+                downloadUrl =
+                    "https://github.com/microg/GmsCore/releases/download/v0.3.16.252432/" +
+                        "com.google.android.gms-252432032-hw.apk",
+            ),
+            officialGitHubSource(
+                componentId = "microg_companion_huawei_compatible",
+                artifactFilename = "com.android.vending-84022632-hw.apk",
+                githubAssetId = 476761461L,
+                sha256 = "c1aa0c8854fcdac31d23d54e1ea62daedff6b7a6405a2f5ff5351c2dde8f113d",
+                downloadUrl =
+                    "https://github.com/microg/GmsCore/releases/download/v0.3.16.252432/" +
+                        "com.android.vending-84022632-hw.apk",
+            ),
+        ),
+    )
+
+    private fun officialGitHubSource(
+        componentId: String,
+        artifactFilename: String,
+        githubAssetId: Long,
+        sha256: String,
+        downloadUrl: String,
+    ) = ArtifactSourceRecord(
+        componentId = componentId,
+        sourceType = ComponentSourceType.OFFICIAL_MICROG_GITHUB,
+        availabilityStatus = SourceAvailabilityStatus.AVAILABLE,
+        sourcePageUrl = RELEASE_SOURCE,
+        downloadUrl = downloadUrl,
+        sourceAssetId = githubAssetId,
+        observedFilename = artifactFilename,
+        sourceDigest = "sha256:$sha256",
+        evidence = listOf("Task 004.3 official GitHub asset audit PASS"),
     )
 
     private fun huaweiArtifact(
