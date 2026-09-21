@@ -68,6 +68,7 @@ private fun runValidationEvidence(args: Array<String>) {
     val report = DeviceValidationEvidenceTool().evaluate(
         baselinePath = baselinePath,
         artifactAuditPath = artifactAuditPath,
+        expectedBaselineSha256 = optionalArgument(args, "--expected-baseline-sha256"),
     )
     DeviceValidationEvidenceWriter.write(report, outputPath)
     println("Device validation evidence ${report.attainedLevel}: $outputPath")

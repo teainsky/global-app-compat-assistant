@@ -171,7 +171,10 @@ class DeviceVerificationPublishingPipeline(
                 component.metadataMatched &&
                 component.versionCode == expected.artifactVersionCode &&
                 component.versionName == expected.artifactVersionName &&
-                artifactEvidence.source == ValidationEvidenceSource.TRUSTED_HOST_AUDIT &&
+                artifactEvidence.source in setOf(
+                    ValidationEvidenceSource.TRUSTED_HOST_AUDIT,
+                    ValidationEvidenceSource.DEVELOPER_REVIEWED_ON_DEVICE_AUDIT,
+                ) &&
                 artifact?.officialArtifactMatched == true &&
                 artifact.sha256.normalizeDigest() == expected.sha256.normalizeDigest() &&
                 artifact.signingCertificateSha256.map { it.normalizeDigest() }.toSet() ==

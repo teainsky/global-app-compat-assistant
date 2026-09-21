@@ -23,18 +23,21 @@ state.
 ## Device validation evidence
 
 The evidence pipeline is local and read-only. It rechecks baseline component metadata against the
-trusted catalog, ignores any promotion/source fields supplied inside input JSON, and only accepts
-APK-byte evidence through the host-audit import path. It never updates `DEVICE_VERIFIED` in the
+trusted catalog and ignores any promotion/source fields supplied inside input JSON. APK-byte
+evidence is accepted through the host-audit import path or strict development-side review of
+schema v3 embedded artifact evidence. The schema v3 importer independently requires both installed
+and official SHA-256 values to match the trusted catalog and requires the exact reviewer-approved
+baseline digest before assigning reviewed provenance. It never updates `DEVICE_VERIFIED` in the
 catalog.
 
 ```powershell
-.\.toolchains\gradle-8.9\bin\gradle.bat :catalog-audit:run --args="--validation-evidence --baseline device-baseline.json --output build/catalog-audit/device-validation-evidence.json"
+$baselineDigest = (Get-FileHash device-baseline.json -Algorithm SHA256).Hash.ToLowerInvariant()
+.\.toolchains\gradle-8.9\bin\gradle.bat :catalog-audit:run --args="--validation-evidence --baseline device-baseline.json --expected-baseline-sha256 $baselineDigest --output build/catalog-audit/device-validation-evidence.json"
 ```
 
-When a future host audit with an exact device/system profile is available, add
-`--artifact-audit device-artifact-audit.json`. Without that input, a successful Pura 70 Pro+
-functional baseline stops at `FUNCTIONALLY_VALIDATED` and explicitly reports the missing artifact
-evidence.
+For schema v2 baselines, add `--artifact-audit device-artifact-audit.json` to supply an exact host
+audit. A schema v3 baseline can carry on-device artifact evidence, but only this development tool
+can revalidate it against the trusted catalog and assign publication-eligible reviewed provenance.
 
 ## Verified device record review
 

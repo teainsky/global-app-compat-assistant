@@ -41,9 +41,12 @@ class DeviceValidationPromotionPolicy {
         val artifactSourceSupportsVerification = artifactEvidence?.source in setOf(
             ValidationEvidenceSource.TRUSTED_HOST_AUDIT,
             ValidationEvidenceSource.ON_DEVICE_READ_ONLY_AUDIT,
+            ValidationEvidenceSource.DEVELOPER_REVIEWED_ON_DEVICE_AUDIT,
         )
-        val trustedPublishingSource =
-            artifactEvidence?.source == ValidationEvidenceSource.TRUSTED_HOST_AUDIT
+        val trustedPublishingSource = artifactEvidence?.source in setOf(
+            ValidationEvidenceSource.TRUSTED_HOST_AUDIT,
+            ValidationEvidenceSource.DEVELOPER_REVIEWED_ON_DEVICE_AUDIT,
+        )
         if (!artifactSourceSupportsVerification) missing += MISSING_TRUSTED_ARTIFACT_AUDIT
         if (artifactEvidence?.source == ValidationEvidenceSource.ON_DEVICE_READ_ONLY_AUDIT) {
             missing += MISSING_TRUSTED_ARTIFACT_AUDIT

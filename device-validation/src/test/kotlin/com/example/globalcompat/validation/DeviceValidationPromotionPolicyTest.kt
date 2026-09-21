@@ -157,6 +157,21 @@ class DeviceValidationPromotionPolicyTest {
         )
     }
 
+    @Test
+    fun `developer reviewed on device audit can meet final threshold`() {
+        val report = evaluate(
+            input(
+                artifactEvidence = artifactEvidence(match = true).copy(
+                    source = ValidationEvidenceSource.DEVELOPER_REVIEWED_ON_DEVICE_AUDIT,
+                ),
+            ),
+        )
+
+        assertEquals(DeviceValidationEvidenceLevel.DEVICE_VERIFIED, report.attainedLevel)
+        assertTrue(report.missingEvidence.isEmpty())
+        assertTrue(report.blockers.isEmpty())
+    }
+
     private fun evaluate(input: DeviceValidationEvidenceInput) =
         policy.evaluate(input, EVALUATED_AT)
 

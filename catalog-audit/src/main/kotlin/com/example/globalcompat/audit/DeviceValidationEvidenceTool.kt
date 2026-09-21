@@ -16,6 +16,7 @@ import com.google.gson.Gson
 import com.google.gson.GsonBuilder
 import java.nio.file.Files
 import java.nio.file.Path
+import java.security.MessageDigest
 import java.time.Instant
 
 class DeviceValidationEvidenceTool(
@@ -27,13 +28,22 @@ class DeviceValidationEvidenceTool(
         baselinePath: Path,
         artifactAuditPath: Path? = null,
         evaluatedAt: String = Instant.now().toString(),
+        expectedBaselineSha256: String? = null,
     ): DeviceValidationEvidenceReport {
-        val baseline = Files.newBufferedReader(baselinePath).use { reader ->
-            gson.fromJson(reader, ImportedBaseline::class.java)
-        }
-        require(baseline.schemaVersion == SUPPORTED_BASELINE_SCHEMA) {
+        val baselineBytes = Files.readAllBytes(baselinePath)
+        val baseline = gson.fromJson(
+            baselineBytes.decodeToString(),
+            ImportedBaseline::class.java,
+        )
+        require(baseline.schemaVersion in SUPPORTED_BASELINE_SCHEMAS) {
             "Unsupported device-baseline schemaVersion: ${baseline.schemaVersion}"
         }
+        val baselineReviewed = expectedBaselineSha256?.let { expected ->
+            val normalized = expected.normalizeDigest().orEmpty()
+            require(SHA256.matches(normalized)) { "Invalid expected baseline SHA-256" }
+            require(sha256(baselineBytes) == normalized) { "Baseline SHA-256 mismatch" }
+            true
+        } == true
         val deviceProfile = ValidationDeviceProfile(
             manufacturer = null,
             model = baseline.device.model,
@@ -71,7 +81,16 @@ class DeviceValidationEvidenceTool(
         )
         val artifactEvidence = artifactAuditPath?.let { path ->
             importArtifactEvidence(path, catalogArtifacts)
-        }
+        } ?: baseline.takeIf { it.schemaVersion == EMBEDDED_AUDIT_BASELINE_SCHEMA }
+            ?.let {
+                importEmbeddedArtifactEvidence(
+                    it,
+                    deviceProfile,
+                    systemProfile,
+                    catalogArtifacts,
+                    baselineReviewed,
+                )
+            }
         val blockedRules = componentEvidence.mapNotNull { component ->
             val official = catalogArtifacts[component.packageName] ?: return@mapNotNull null
             BuiltInComponentCatalog.catalog.blockedVersions.firstOrNull { rule ->
@@ -122,6 +141,46 @@ class DeviceValidationEvidenceTool(
         )
     }
 
+    private fun importEmbeddedArtifactEvidence(
+        baseline: ImportedBaseline,
+        deviceProfile: ValidationDeviceProfile,
+        systemProfile: ValidationSystemProfile,
+        catalogArtifacts: Map<String, ComponentArtifact>,
+        baselineReviewed: Boolean,
+    ): ValidationArtifactEvidence = ValidationArtifactEvidence(
+        deviceProfile = deviceProfile,
+        systemProfile = systemProfile,
+        components = baseline.components.map { component ->
+            val official = catalogArtifacts[component.packageName]
+            val audit = component.artifactAudit
+            val exactHashMatch = official != null && audit != null &&
+                audit.installedApkSha256.normalizeDigest() == official.sha256.normalizeDigest() &&
+                audit.officialApkSha256.normalizeDigest() == official.sha256.normalizeDigest()
+            val exactArtifactMatch = official != null &&
+                component.matchesMetadata(official) &&
+                audit?.readStatus == AUDITED &&
+                audit.artifactMatchStatus == ACTUAL_ARTIFACT_MATCH &&
+                exactHashMatch
+            ValidationArtifactComponentEvidence(
+                packageName = component.packageName,
+                sha256 = audit?.installedApkSha256,
+                signingCertificateSha256 = if (exactArtifactMatch) {
+                    listOfNotNull(official?.signingCertificateDigest)
+                } else {
+                    component.reportedSigningCertificateSha256
+                },
+                officialArtifactMatched = exactArtifactMatch,
+            )
+        },
+        // Only this development-side importer can assign the reviewed provenance.
+        // The client-provided attained level and source-like fields are never trusted.
+        source = if (baselineReviewed) {
+            ValidationEvidenceSource.DEVELOPER_REVIEWED_ON_DEVICE_AUDIT
+        } else {
+            ValidationEvidenceSource.ON_DEVICE_READ_ONLY_AUDIT
+        },
+    )
+
     private fun ImportedBaselineComponent.matchesMetadata(artifact: ComponentArtifact): Boolean =
         officialMatchStatus == VERSION_MATCH &&
             installed &&
@@ -140,6 +199,10 @@ class DeviceValidationEvidenceTool(
 
     private fun String?.normalizeDigest(): String? =
         this?.replace(":", "")?.lowercase()
+
+    private fun sha256(bytes: ByteArray): String = MessageDigest.getInstance("SHA-256")
+        .digest(bytes)
+        .joinToString("") { byte -> "%02x".format(byte) }
 
     private data class ImportedBaseline(
         val schemaVersion: Int,
@@ -165,6 +228,15 @@ class DeviceValidationEvidenceTool(
         val versionCode: Long?,
         val versionName: String?,
         val officialMatchStatus: String,
+        val reportedSigningCertificateSha256: List<String> = emptyList(),
+        val artifactAudit: ImportedBaselineArtifactAudit? = null,
+    )
+
+    private data class ImportedBaselineArtifactAudit(
+        val readStatus: String?,
+        val installedApkSha256: String?,
+        val officialApkSha256: String?,
+        val artifactMatchStatus: String?,
     )
 
     private data class ImportedFunctionalValidation(
@@ -192,12 +264,15 @@ class DeviceValidationEvidenceTool(
     )
 
     private companion object {
-        const val SUPPORTED_BASELINE_SCHEMA = 2
+        val SUPPORTED_BASELINE_SCHEMAS = setOf(2, 3)
+        const val EMBEDDED_AUDIT_BASELINE_SCHEMA = 3
         const val SUPPORTED_ARTIFACT_AUDIT_SCHEMA = 1
         const val VERSION_MATCH = "VERSION_MATCH"
         const val ACTUAL_ARTIFACT_MATCH = "ACTUAL_ARTIFACT_MATCH"
+        const val AUDITED = "AUDITED"
         const val PASS = "PASS"
         const val YES = "YES"
+        val SHA256 = Regex("[0-9a-f]{64}")
     }
 }
 

@@ -49,6 +49,27 @@ class DeviceVerificationPublishingPipelineTest {
     }
 
     @Test
+    fun `developer reviewed on device evidence generates exact formal record`() {
+        val report = policy.evaluate(
+            baseInput(
+                artifactEvidence = artifactEvidence(SYSTEM_42).copy(
+                    source = ValidationEvidenceSource.DEVELOPER_REVIEWED_ON_DEVICE_AUDIT,
+                ),
+            ),
+            EVALUATED_AT,
+        )
+        val evidence = evidenceBytes(report)
+
+        val result = DeviceVerificationPublishingPipeline(catalog).publish(
+            evidence,
+            sha256(evidence),
+        ) as DeviceRecordPublicationResult.Approved
+
+        assertEquals(DEVICE.model, result.record.deviceModel)
+        assertEquals(PublishedCompatibilityStatus.DEVICE_VERIFIED, result.record.compatibilityStatus)
+    }
+
+    @Test
     fun `current Pura functional baseline is explicitly rejected`() {
         val report = policy.evaluate(
             baseInput(artifactEvidence = null),
@@ -81,6 +102,18 @@ class DeviceVerificationPublishingPipelineTest {
     fun `HarmonyOS 4_2 evidence cannot be retargeted to 4_3`() {
         val changedSystem = SYSTEM_42.copy(harmonyOsVersion = "4.3", romVersion = "4.3")
         val forged = fullReport().copy(systemProfile = changedSystem)
+        val evidence = evidenceBytes(forged)
+
+        val result = rejected(evidence, sha256(evidence))
+
+        assertTrue(DeviceRecordPublicationRejection.EXACT_PROFILE_MISMATCH in result.reasons)
+    }
+
+    @Test
+    fun `exact device evidence cannot be retargeted to another Pura model`() {
+        val forged = fullReport().copy(
+            deviceProfile = DEVICE.copy(model = "Another Pura Model"),
+        )
         val evidence = evidenceBytes(forged)
 
         val result = rejected(evidence, sha256(evidence))
