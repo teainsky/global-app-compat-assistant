@@ -1,8 +1,17 @@
 package com.example.globalcompat.baseline
 
+import com.example.globalcompat.artifact.OnDeviceArtifactAuditReport
+import com.example.globalcompat.artifact.OnDeviceArtifactComponentResult
 import com.example.globalcompat.catalog.InstalledArtifactSignatureStatus
 import com.example.globalcompat.data.EnvironmentReport
 import com.example.globalcompat.data.RomFamily
+import com.example.globalcompat.validation.DeviceValidationEvidenceInput
+import com.example.globalcompat.validation.DeviceValidationPromotionPolicy
+import com.example.globalcompat.validation.ValidationComponentEvidence
+import com.example.globalcompat.validation.ValidationDeviceProfile
+import com.example.globalcompat.validation.ValidationEvidenceSource
+import com.example.globalcompat.validation.ValidationFunctionalEvidence
+import com.example.globalcompat.validation.ValidationSystemProfile
 import com.google.gson.GsonBuilder
 
 class DeviceBaselineReportFactory {
@@ -11,6 +20,7 @@ class DeviceBaselineReportFactory {
         comparisons: List<OfficialComponentComparison>,
         functionalValidation: UserFunctionalValidation,
         capturedAtEpochMillis: Long = System.currentTimeMillis(),
+        artifactAuditReport: OnDeviceArtifactAuditReport? = null,
     ): DeviceBaselineReport {
         val device = BaselineDeviceInfo(
             model = environment.device.model,
@@ -26,6 +36,9 @@ class DeviceBaselineReportFactory {
             romDisplayName = environment.rom.displayName,
             romVersion = environment.rom.version,
         )
+        val artifactAuditsByPackage = artifactAuditReport?.components
+            ?.associateBy { it.packageName }
+            .orEmpty()
         val componentReports = comparisons.map { comparison ->
             val fingerprint = comparison.fingerprint
             BaselineComponentReport(
@@ -39,8 +52,46 @@ class DeviceBaselineReportFactory {
                 installSource = fingerprint.installSource,
                 officialMatchStatus = comparison.status,
                 signatureStatus = comparison.signatureStatus,
+                artifactAudit = artifactAuditsByPackage[fingerprint.packageName]
+                    .toBaselineArtifactAudit(),
             )
         }
+        val attainedEvidenceLevel = DeviceValidationPromotionPolicy().evaluate(
+            input = DeviceValidationEvidenceInput(
+                deviceProfile = ValidationDeviceProfile(
+                    manufacturer = environment.device.manufacturer,
+                    model = environment.device.model,
+                ),
+                systemProfile = ValidationSystemProfile(
+                    harmonyOsVersion = system.harmonyOsVersion,
+                    androidVersion = system.androidVersion,
+                    androidApiLevel = system.androidApiLevel,
+                    romFamily = system.romFamily,
+                    romVersion = system.romVersion,
+                ),
+                componentEvidence = comparisons.map { comparison ->
+                    ValidationComponentEvidence(
+                        packageName = comparison.fingerprint.packageName,
+                        versionCode = comparison.fingerprint.versionCode?.toString(),
+                        versionName = comparison.fingerprint.versionName,
+                        metadataMatched = comparison.status ==
+                            OfficialComponentMatchStatus.VERSION_MATCH,
+                        source = ValidationEvidenceSource.TRUSTED_CATALOG_COMPARISON,
+                    )
+                },
+                functionalEvidence = ValidationFunctionalEvidence(
+                    googleAccountLogin =
+                        functionalValidation.googleAccountLogin == UserValidationAnswer.YES,
+                    chatGptLoginAndUse =
+                        functionalValidation.chatGptLoginAndUse == UserValidationAnswer.YES,
+                    chromeGoogleLogin =
+                        functionalValidation.chromeGoogleLogin == UserValidationAnswer.YES,
+                    source = ValidationEvidenceSource.USER_CONFIRMATION,
+                ),
+                artifactEvidence = artifactAuditReport?.artifactEvidence,
+            ),
+            evaluatedAt = capturedAtEpochMillis.toString(),
+        ).attainedLevel
         val validationRecord = createValidationRecord(
             capturedAtEpochMillis,
             device,
@@ -54,15 +105,29 @@ class DeviceBaselineReportFactory {
                 environment.rom.displayName.isNotBlank(),
         )
         return DeviceBaselineReport(
-            schemaVersion = 2,
+            schemaVersion = 3,
             capturedAtEpochMillis = capturedAtEpochMillis,
             device = device,
             system = system,
             components = componentReports,
             functionalValidation = functionalValidation,
+            attainedEvidenceLevel = attainedEvidenceLevel,
             deviceValidationRecord = validationRecord,
         )
     }
+
+    private fun OnDeviceArtifactComponentResult?.toBaselineArtifactAudit():
+        BaselineArtifactAudit = BaselineArtifactAudit(
+        readStatus = this?.readStatus?.name,
+        installedApkSha256 = this?.installedApkSha256,
+        officialApkSha256 = this?.officialApkSha256,
+        artifactMatchStatus = when {
+            this == null -> BaselineArtifactMatchStatus.NOT_AUDITED
+            officialArtifactMatched -> BaselineArtifactMatchStatus.ACTUAL_ARTIFACT_MATCH
+            installedApkSha256 != null -> BaselineArtifactMatchStatus.NOT_MATCHED
+            else -> BaselineArtifactMatchStatus.UNAVAILABLE
+        },
+    )
 
     private fun createValidationRecord(
         capturedAtEpochMillis: Long,

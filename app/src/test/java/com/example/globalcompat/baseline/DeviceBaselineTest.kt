@@ -1,5 +1,9 @@
 package com.example.globalcompat.baseline
 
+import com.example.globalcompat.artifact.OnDeviceArtifactAuditAvailability
+import com.example.globalcompat.artifact.OnDeviceArtifactAuditReport
+import com.example.globalcompat.artifact.OnDeviceArtifactComponentResult
+import com.example.globalcompat.artifact.OnDeviceArtifactReadStatus
 import com.example.globalcompat.catalog.BuiltInComponentCatalog
 import com.example.globalcompat.catalog.InstalledArtifactSignatureStatus
 import com.example.globalcompat.data.AndroidPlatform
@@ -14,6 +18,12 @@ import com.example.globalcompat.data.EnvironmentReport
 import com.example.globalcompat.data.GoogleCompatibilityLayerStatus
 import com.example.globalcompat.data.RomFamily
 import com.example.globalcompat.data.RomIdentification
+import com.example.globalcompat.validation.DeviceValidationEvidenceLevel
+import com.example.globalcompat.validation.ValidationArtifactComponentEvidence
+import com.example.globalcompat.validation.ValidationArtifactEvidence
+import com.example.globalcompat.validation.ValidationDeviceProfile
+import com.example.globalcompat.validation.ValidationEvidenceSource
+import com.example.globalcompat.validation.ValidationSystemProfile
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -184,6 +194,58 @@ class DeviceBaselineTest {
     }
 
     @Test
+    fun `baseline export includes artifact audit and caps evidence at artifact verified`() {
+        val report = factory.create(
+            environment = environment(),
+            comparisons = matcher.compare(officialPair(), harmonyContext()),
+            functionalValidation = allYes(),
+            capturedAtEpochMillis = NOW,
+            artifactAuditReport = successfulArtifactAudit(),
+        )
+
+        assertEquals(3, report.schemaVersion)
+        assertEquals(
+            DeviceValidationEvidenceLevel.ARTIFACT_VERIFIED,
+            report.attainedEvidenceLevel,
+        )
+        assertNull(report.deviceValidationRecord)
+        assertTrue(report.components.all {
+            it.artifactAudit.artifactMatchStatus ==
+                BaselineArtifactMatchStatus.ACTUAL_ARTIFACT_MATCH &&
+                it.artifactAudit.installedApkSha256 == OFFICIAL_HASHES[it.packageName] &&
+                it.artifactAudit.officialApkSha256 == OFFICIAL_HASHES[it.packageName]
+        })
+
+        val json = DeviceBaselineJsonExporter.toJson(report)
+        assertTrue(json.contains("\"artifactAudit\""))
+        assertTrue(json.contains("\"installedApkSha256\""))
+        assertTrue(json.contains("\"officialApkSha256\""))
+        assertTrue(json.contains("\"artifactMatchStatus\": \"ACTUAL_ARTIFACT_MATCH\""))
+        assertTrue(json.contains("\"attainedEvidenceLevel\": \"ARTIFACT_VERIFIED\""))
+        assertFalse(json.contains("\"attainedEvidenceLevel\": \"DEVICE_VERIFIED\""))
+    }
+
+    @Test
+    fun `baseline without artifact audit records not audited and stays functional`() {
+        val report = factory.create(
+            environment = environment(),
+            comparisons = matcher.compare(officialPair(), harmonyContext()),
+            functionalValidation = allYes(),
+            capturedAtEpochMillis = NOW,
+        )
+
+        assertEquals(
+            DeviceValidationEvidenceLevel.FUNCTIONALLY_VALIDATED,
+            report.attainedEvidenceLevel,
+        )
+        assertTrue(report.components.all {
+            it.artifactAudit.artifactMatchStatus == BaselineArtifactMatchStatus.NOT_AUDITED &&
+                it.artifactAudit.installedApkSha256 == null &&
+                it.artifactAudit.officialApkSha256 == null
+        })
+    }
+
+    @Test
     fun `baseline JSON excludes device unique identifiers`() {
         val report = factory.create(
             environment(),
@@ -281,6 +343,60 @@ class DeviceBaselineTest {
         chatGptLoginAndUse = UserValidationAnswer.YES,
         chromeGoogleLogin = UserValidationAnswer.YES,
     )
+
+    private fun successfulArtifactAudit(): OnDeviceArtifactAuditReport {
+        val deviceProfile = ValidationDeviceProfile(
+            manufacturer = "HUAWEI",
+            model = "Huawei Pura 70 Pro+",
+        )
+        val systemProfile = ValidationSystemProfile(
+            harmonyOsVersion = "4.2",
+            androidVersion = "12",
+            androidApiLevel = 31,
+            romFamily = RomFamily.HARMONY_OS.name,
+            romVersion = "4.2",
+        )
+        val components = officialPair().map { fingerprint ->
+            val sha256 = checkNotNull(OFFICIAL_HASHES[fingerprint.packageName])
+            OnDeviceArtifactComponentResult(
+                packageName = fingerprint.packageName,
+                readStatus = OnDeviceArtifactReadStatus.AUDITED,
+                versionCode = fingerprint.versionCode.toString(),
+                versionName = fingerprint.versionName,
+                reportedSigningCertificateSha256 = listOf(OFFICIAL_SIGNER),
+                splitApkCount = 0,
+                installedApkSha256 = sha256,
+                officialApkSha256 = sha256,
+                packageMatched = true,
+                versionMatched = true,
+                signerAccepted = true,
+                officialArtifactMatched = true,
+                failureType = null,
+            )
+        }
+        return OnDeviceArtifactAuditReport(
+            schemaVersion = 1,
+            availability =
+                OnDeviceArtifactAuditAvailability.ON_DEVICE_ARTIFACT_AUDIT_SUPPORTED,
+            components = components,
+            artifactEvidence = ValidationArtifactEvidence(
+                deviceProfile = deviceProfile,
+                systemProfile = systemProfile,
+                components = components.map { component ->
+                    ValidationArtifactComponentEvidence(
+                        packageName = component.packageName,
+                        sha256 = component.installedApkSha256,
+                        signingCertificateSha256 =
+                            component.reportedSigningCertificateSha256,
+                        officialArtifactMatched = component.officialArtifactMatched,
+                    )
+                },
+                source = ValidationEvidenceSource.ON_DEVICE_READ_ONLY_AUDIT,
+            ),
+            attainedEvidenceLevel = DeviceValidationEvidenceLevel.ARTIFACT_VERIFIED,
+            auditedAtEpochMillis = NOW,
+        )
+    }
 
     private fun environment() = EnvironmentReport(
         schemaVersion = 2,

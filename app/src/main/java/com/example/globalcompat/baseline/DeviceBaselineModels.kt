@@ -1,6 +1,7 @@
 package com.example.globalcompat.baseline
 
 import com.example.globalcompat.catalog.InstalledArtifactSignatureStatus
+import com.example.globalcompat.validation.DeviceValidationEvidenceLevel
 
 enum class ComponentFingerprintReadStatus {
     READABLE,
@@ -78,6 +79,21 @@ data class BaselineComponentReport(
     val installSource: String?,
     val officialMatchStatus: OfficialComponentMatchStatus,
     val signatureStatus: InstalledArtifactSignatureStatus,
+    val artifactAudit: BaselineArtifactAudit,
+)
+
+enum class BaselineArtifactMatchStatus {
+    ACTUAL_ARTIFACT_MATCH,
+    NOT_MATCHED,
+    UNAVAILABLE,
+    NOT_AUDITED,
+}
+
+data class BaselineArtifactAudit(
+    val readStatus: String?,
+    val installedApkSha256: String?,
+    val officialApkSha256: String?,
+    val artifactMatchStatus: BaselineArtifactMatchStatus,
 )
 
 data class DeviceValidationRecord(
@@ -99,5 +115,6 @@ data class DeviceBaselineReport(
     val system: BaselineSystemInfo,
     val components: List<BaselineComponentReport>,
     val functionalValidation: UserFunctionalValidation,
+    val attainedEvidenceLevel: DeviceValidationEvidenceLevel?,
     val deviceValidationRecord: DeviceValidationRecord?,
 )

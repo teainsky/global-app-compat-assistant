@@ -232,6 +232,7 @@ private fun ScannerScreen(scanner: DeviceBaselineScanner) {
                         comparisons = result.componentComparisons,
                         functionalValidation = functionalValidation,
                         capturedAtEpochMillis = result.environment.scannedAtEpochMillis,
+                        artifactAuditReport = artifactAuditReport,
                     )
                     pendingJson = DeviceBaselineJsonExporter.toJson(baseline)
                     saveLauncher.launch("device-baseline.json")
