@@ -24,12 +24,14 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -57,6 +59,13 @@ import com.example.globalcompat.installation.InstallationBlockReason
 import com.example.globalcompat.installation.InstallationSessionPlan
 import com.example.globalcompat.installation.InstallationSessionStatus
 import com.example.globalcompat.installation.InstallationStepState
+import com.example.globalcompat.preparation.AndroidEnvironmentPreparationService
+import com.example.globalcompat.preparation.EnvironmentPreparationProgress
+import com.example.globalcompat.preparation.EnvironmentPreparationRequest
+import com.example.globalcompat.preparation.EnvironmentPreparationResult
+import com.example.globalcompat.preparation.EnvironmentPreparationStage
+import com.example.globalcompat.preparation.EnvironmentPreparationStatus
+import com.example.globalcompat.preparation.PreparationCancellation
 import com.example.globalcompat.simulation.CurrentComponentState
 import com.example.globalcompat.simulation.SimulatedInstallAction
 import com.example.globalcompat.simulation.SimulatedInstallationPlan
@@ -86,9 +95,18 @@ private fun ScannerScreen(scanner: DeviceBaselineScanner) {
     var functionalValidation by remember { mutableStateOf(UserFunctionalValidation()) }
     var pendingJson by remember { mutableStateOf<String?>(null) }
     var isScanning by remember { mutableStateOf(false) }
+    var preparationProgress by remember { mutableStateOf<EnvironmentPreparationProgress?>(null) }
+    var preparationResult by remember { mutableStateOf<EnvironmentPreparationResult?>(null) }
+    var activePreparation by remember { mutableStateOf<PreparationCancellation?>(null) }
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
     val reportFactory = remember { DeviceBaselineReportFactory() }
+    val preparationService = remember(context.applicationContext) {
+        AndroidEnvironmentPreparationService(context.applicationContext)
+    }
+    DisposableEffect(Unit) {
+        onDispose { activePreparation?.cancel() }
+    }
     val saveLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/json"),
     ) { uri ->
@@ -119,6 +137,10 @@ private fun ScannerScreen(scanner: DeviceBaselineScanner) {
             scanResult == null -> StartState(
                 modifier = Modifier.padding(innerPadding),
                 onStart = {
+                    activePreparation?.cancel()
+                    activePreparation = null
+                    preparationProgress = null
+                    preparationResult = null
                     isScanning = true
                     scope.launch {
                         scanResult = withContext(Dispatchers.IO) { scanner.scan() }
@@ -131,6 +153,41 @@ private fun ScannerScreen(scanner: DeviceBaselineScanner) {
                 scanResult = checkNotNull(scanResult),
                 functionalValidation = functionalValidation,
                 onFunctionalValidationChange = { functionalValidation = it },
+                preparationProgress = preparationProgress,
+                preparationResult = preparationResult,
+                onPrepareEnvironment = {
+                    val result = checkNotNull(scanResult)
+                    val cancellation = PreparationCancellation()
+                    activePreparation = cancellation
+                    preparationResult = null
+                    preparationProgress = EnvironmentPreparationProgress(
+                        status = EnvironmentPreparationStatus.PREPARING,
+                        stage = EnvironmentPreparationStage.WAITING,
+                        componentIndex = 0,
+                        componentCount = 2,
+                        currentComponent = null,
+                        downloadedBytes = 0,
+                        totalBytes = null,
+                        userMessage = "正在准备 Google 运行环境",
+                    )
+                    scope.launch {
+                        val completed = withContext(Dispatchers.IO) {
+                            preparationService.prepare(
+                                request = EnvironmentPreparationRequest(
+                                    deviceCategory = result.environment.compatibilityPlan.deviceCategory,
+                                    planId = result.environment.compatibilityPlan.planId,
+                                    systemVersion = result.environment.rom.version,
+                                ),
+                                cancellation = cancellation,
+                            ) { update ->
+                                scope.launch { preparationProgress = update }
+                            }
+                        }
+                        preparationResult = completed
+                        activePreparation = null
+                    }
+                },
+                onCancelPreparation = { activePreparation?.cancel() },
                 onExport = {
                     val result = checkNotNull(scanResult)
                     val baseline = reportFactory.create(
@@ -198,6 +255,10 @@ private fun EnvironmentReportView(
     scanResult: DeviceBaselineScanResult,
     functionalValidation: UserFunctionalValidation,
     onFunctionalValidationChange: (UserFunctionalValidation) -> Unit,
+    preparationProgress: EnvironmentPreparationProgress?,
+    preparationResult: EnvironmentPreparationResult?,
+    onPrepareEnvironment: () -> Unit,
+    onCancelPreparation: () -> Unit,
     onExport: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -271,6 +332,15 @@ private fun EnvironmentReportView(
             SimulatedInstallationPlanCard(scanResult.simulatedInstallationPlan)
         }
         item {
+            EnvironmentPreparationCard(
+                plan = report.compatibilityPlan,
+                progress = preparationProgress,
+                result = preparationResult,
+                onPrepare = onPrepareEnvironment,
+                onCancel = onCancelPreparation,
+            )
+        }
+        item {
             InstallationExecutionGateCard(scanResult.installationSessionPlan)
         }
         item {
@@ -292,6 +362,130 @@ private fun EnvironmentReportView(
             )
         }
     }
+}
+
+@Composable
+private fun EnvironmentPreparationCard(
+    plan: CompatibilityPlan,
+    progress: EnvironmentPreparationProgress?,
+    result: EnvironmentPreparationResult?,
+    onPrepare: () -> Unit,
+    onCancel: () -> Unit,
+) {
+    var showTechnicalDetails by remember(result, progress?.status) { mutableStateOf(false) }
+    val isPreparing = progress?.status == EnvironmentPreparationStatus.PREPARING
+    val isReady = result?.status == EnvironmentPreparationStatus.DOWNLOAD_VERIFIED_READY
+    val branchAllowed = plan.deviceCategory ==
+        com.example.globalcompat.data.DeviceCategory.HUAWEI_HARMONY_ANDROID_COMPAT &&
+        plan.planId == CompatibilityPlanId.HUAWEI_MICROG_COMPAT_PLAN
+    val headline = when {
+        isReady -> "环境文件已准备完成"
+        result?.status == EnvironmentPreparationStatus.FAIL_CLOSED ->
+            "准备失败，未保留无效文件"
+        result?.status == EnvironmentPreparationStatus.CANCELLED -> "准备已取消"
+        isPreparing -> progress.userMessage
+        !branchAllowed -> "当前设备不适用此准备流程"
+        else -> "准备 Google 运行环境"
+    }
+
+    ReportSection("准备环境文件") {
+        Text(
+            text = headline,
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.SemiBold,
+        )
+        if (isPreparing) {
+            val total = progress.totalBytes
+            val fraction = total?.takeIf { it > 0L }
+                ?.let { (progress.downloadedBytes.toFloat() / it).coerceIn(0f, 1f) }
+            if (fraction == null) {
+                LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+            } else {
+                LinearProgressIndicator(
+                    progress = { fraction },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+            if (progress.componentIndex > 0) {
+                Text(
+                    text = "${progress.userMessage} · ${progress.currentComponent.userComponentName()}",
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            }
+            if (progress.downloadedBytes > 0L) {
+                val sizeText = total?.let {
+                    "${progress.downloadedBytes.userFileSize()} / ${it.userFileSize()}"
+                } ?: progress.downloadedBytes.userFileSize()
+                Text(sizeText, style = MaterialTheme.typography.bodySmall)
+            }
+            OutlinedButton(
+                modifier = Modifier.fillMaxWidth(),
+                onClick = onCancel,
+            ) {
+                Text("取消")
+            }
+        } else {
+            Button(
+                modifier = Modifier.fillMaxWidth(),
+                enabled = branchAllowed && !isReady,
+                onClick = onPrepare,
+            ) {
+                Text(
+                    when {
+                        isReady -> "准备完成"
+                        result?.status == EnvironmentPreparationStatus.FAIL_CLOSED -> "重新准备"
+                        else -> "准备环境文件"
+                    },
+                )
+            }
+        }
+        if (isReady && result?.installationAllowed == false) {
+            Text(
+                text = "文件已安全校验；当前方案尚未完成设备验证，安装仍然锁定。",
+                style = MaterialTheme.typography.bodyMedium,
+            )
+        }
+        if (!branchAllowed && plan.deviceCategory ==
+            com.example.globalcompat.data.DeviceCategory.HARMONYOS_5_PLUS
+        ) {
+            Text(
+                text = "HarmonyOS 5+ 不进入旧鸿蒙组件流程。",
+                style = MaterialTheme.typography.bodySmall,
+            )
+        }
+        if (result != null || progress?.technicalDetail != null) {
+            TextButton(onClick = { showTechnicalDetails = !showTechnicalDetails }) {
+                Text(if (showTechnicalDetails) "收起详细信息" else "查看详细信息")
+            }
+        }
+        if (showTechnicalDetails) {
+            progress?.technicalDetail?.let { Text("• $it", style = MaterialTheme.typography.bodySmall) }
+            result?.failures?.forEach { failure ->
+                Text("• ${failure.name}", style = MaterialTheme.typography.bodySmall)
+            }
+            result?.preparedComponents?.forEach { component ->
+                Text(
+                    "• ${component.artifactFilename} · ${component.sizeBytes.userFileSize()}",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+            result?.technicalDetails?.forEach { detail ->
+                Text("• $detail", style = MaterialTheme.typography.bodySmall)
+            }
+        }
+    }
+}
+
+private fun String?.userComponentName(): String = when (this) {
+    "microg_services_huawei_compatible" -> "服务组件"
+    "microg_companion_huawei_compatible" -> "配套组件"
+    else -> "组件"
+}
+
+private fun Long.userFileSize(): String = when {
+    this >= 1024L * 1024L -> "%.1f MB".format(this / (1024f * 1024f))
+    this >= 1024L -> "%.1f KB".format(this / 1024f)
+    else -> "$this B"
 }
 
 @Composable
@@ -395,7 +589,7 @@ private fun InstallationExecutionGateCard(plan: InstallationSessionPlan) {
             Text(buttonText)
         }
         Text(
-            text = "当前版本不会下载 APK，也不会调用 Android PackageInstaller。",
+            text = "当前版本不会安装 APK，也不会调用 Android PackageInstaller；文件准备与安装门禁相互独立。",
             style = MaterialTheme.typography.bodySmall,
         )
     }
@@ -424,7 +618,7 @@ private fun SimulatedInstallationPlanCard(plan: SimulatedInstallationPlan) {
             fontWeight = FontWeight.SemiBold,
         )
         Text(
-            text = "仅展示未来流程，不会下载、安装、卸载或修改系统。",
+            text = "仅展示未来安装步骤；不会安装、卸载或修改系统。",
             style = MaterialTheme.typography.bodySmall,
         )
         plan.selectedReleaseTag?.let { ReportRow("官方候选版本", it) }
