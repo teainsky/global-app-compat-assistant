@@ -53,6 +53,10 @@ import com.example.globalcompat.data.ComponentPresence
 import com.example.globalcompat.data.CompatibilityPlan
 import com.example.globalcompat.data.CompatibilityPlanId
 import com.example.globalcompat.data.SystemComponent
+import com.example.globalcompat.installation.InstallationBlockReason
+import com.example.globalcompat.installation.InstallationSessionPlan
+import com.example.globalcompat.installation.InstallationSessionStatus
+import com.example.globalcompat.installation.InstallationStepState
 import com.example.globalcompat.simulation.CurrentComponentState
 import com.example.globalcompat.simulation.SimulatedInstallAction
 import com.example.globalcompat.simulation.SimulatedInstallationPlan
@@ -267,6 +271,9 @@ private fun EnvironmentReportView(
             SimulatedInstallationPlanCard(scanResult.simulatedInstallationPlan)
         }
         item {
+            InstallationExecutionGateCard(scanResult.installationSessionPlan)
+        }
+        item {
             Text(
                 text = "官方组件指纹比对",
                 style = MaterialTheme.typography.titleMedium,
@@ -335,6 +342,62 @@ private fun CompatibilityPlanCard(plan: CompatibilityPlan) {
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun InstallationExecutionGateCard(plan: InstallationSessionPlan) {
+    val buttonText = when {
+        plan.status == InstallationSessionStatus.NO_ACTION_REQUIRED -> "无需安装"
+        InstallationBlockReason.HARMONYOS_5_PLUS_NOT_SUPPORTED in plan.blockReasons ->
+            "当前系统不适用，禁止安装"
+        InstallationBlockReason.SIGNATURE_MISMATCH in plan.blockReasons ->
+            "签名异常，禁止安装"
+        InstallationBlockReason.OFFICIAL_SOURCE_UNAVAILABLE in plan.blockReasons ->
+            "官方组件不可取得，暂不可安装"
+        InstallationBlockReason.COMPATIBILITY_NOT_DEVICE_VERIFIED in plan.blockReasons ->
+            "当前方案尚未完成设备验证，暂不可安装"
+        plan.status == InstallationSessionStatus.READY_FOR_USER_CONFIRMATION ->
+            "安装接口尚未启用"
+        else -> "安全门禁未通过，暂不可安装"
+    }
+    ReportSection("安装执行安全门禁") {
+        Text(
+            text = plan.userMessage,
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.SemiBold,
+        )
+        plan.steps.forEach { step ->
+            val state = when (step.state) {
+                InstallationStepState.ALREADY_COMPLETED -> "已完成"
+                InstallationStepState.PENDING_DOWNLOAD -> "等待下载"
+                InstallationStepState.DOWNLOADED -> "已下载，待校验"
+                InstallationStepState.VERIFIED -> "校验通过"
+                InstallationStepState.READY_FOR_USER_CONFIRMATION -> "等待系统用户确认"
+                InstallationStepState.BLOCKED -> "已阻止"
+            }
+            Text(
+                text = "• ${step.packageName.ifBlank { step.componentId }}：$state",
+                style = MaterialTheme.typography.bodyMedium,
+            )
+        }
+        if (plan.blockReasons.isNotEmpty()) {
+            Text("阻止原因", style = MaterialTheme.typography.labelMedium)
+            plan.blockReasons.forEach { reason ->
+                Text("• ${reason.name}", style = MaterialTheme.typography.bodySmall)
+            }
+        }
+        OutlinedButton(
+            modifier = Modifier.fillMaxWidth(),
+            enabled = false,
+            onClick = {},
+        ) {
+            Text(buttonText)
+        }
+        Text(
+            text = "当前版本不会下载 APK，也不会调用 Android PackageInstaller。",
+            style = MaterialTheme.typography.bodySmall,
+        )
     }
 }
 

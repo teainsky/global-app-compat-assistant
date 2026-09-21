@@ -4,6 +4,8 @@ import android.content.Context
 import com.example.globalcompat.catalog.BuiltInComponentCatalog
 import com.example.globalcompat.data.DeviceEnvironmentScanner
 import com.example.globalcompat.data.EnvironmentReport
+import com.example.globalcompat.installation.InstallationExecutionGate
+import com.example.globalcompat.installation.InstallationSessionPlan
 import com.example.globalcompat.simulation.SimulatedInstallationPlan
 import com.example.globalcompat.simulation.SimulatedInstallationPlanner
 
@@ -11,6 +13,7 @@ data class DeviceBaselineScanResult(
     val environment: EnvironmentReport,
     val componentComparisons: List<OfficialComponentComparison>,
     val simulatedInstallationPlan: SimulatedInstallationPlan,
+    val installationSessionPlan: InstallationSessionPlan,
 )
 
 class DeviceBaselineScanner(
@@ -22,6 +25,8 @@ class DeviceBaselineScanner(
         OfficialComponentMatcher(BuiltInComponentCatalog.catalog),
     private val simulatedInstallationPlanner: SimulatedInstallationPlanner =
         SimulatedInstallationPlanner(BuiltInComponentCatalog.catalog),
+    private val installationExecutionGate: InstallationExecutionGate =
+        InstallationExecutionGate(BuiltInComponentCatalog.catalog),
 ) {
     fun scan(): DeviceBaselineScanResult {
         val environment = environmentScanner.scan()
@@ -34,13 +39,15 @@ class DeviceBaselineScanner(
                 romVersion = environment.rom.version,
             ),
         )
+        val simulatedPlan = simulatedInstallationPlanner.create(
+            environment = environment,
+            comparisons = comparisons,
+        )
         return DeviceBaselineScanResult(
             environment = environment,
             componentComparisons = comparisons,
-            simulatedInstallationPlan = simulatedInstallationPlanner.create(
-                environment = environment,
-                comparisons = comparisons,
-            ),
+            simulatedInstallationPlan = simulatedPlan,
+            installationSessionPlan = installationExecutionGate.evaluate(simulatedPlan),
         )
     }
 }
