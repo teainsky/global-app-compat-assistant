@@ -35,3 +35,17 @@ When a future host audit with an exact device/system profile is available, add
 `--artifact-audit device-artifact-audit.json`. Without that input, a successful Pura 70 Pro+
 functional baseline stops at `FUNCTIONALLY_VALIDATED` and explicitly reports the missing artifact
 evidence.
+
+## Verified device record review
+
+Record generation requires a reviewer-approved SHA-256 of the exact evidence file. The pipeline
+checks that digest, reruns the promotion policy, and independently matches the exact device/system
+profile and both artifacts against the trusted catalog before writing an unsigned record:
+
+```powershell
+$digest = (Get-FileHash device-validation-evidence.json -Algorithm SHA256).Hash.ToLowerInvariant()
+.\.toolchains\gradle-8.9\bin\gradle.bat :catalog-audit:run --args="--publish-device-record --evidence device-validation-evidence.json --expected-evidence-sha256 $digest --output build/catalog-audit/verified-device-record.json"
+```
+
+`verified-device-record.json` remains a development-side approval artifact. This command never
+modifies, signs, or publishes the online compatibility catalog.

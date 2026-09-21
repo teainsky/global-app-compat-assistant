@@ -16,6 +16,10 @@ fun main(args: Array<String>) {
         runValidationEvidence(args)
         return
     }
+    if ("--publish-device-record" in args) {
+        runDeviceRecordPublication(args)
+        return
+    }
     val releaseTag = argument(args, "--release-tag")
     val outputDirectory = Path.of("build", "catalog-audit", releaseTag)
     val sdkValue = System.getenv("ANDROID_HOME")
@@ -30,6 +34,28 @@ fun main(args: Array<String>) {
     AuditReportWriter().write(report, outputDirectory)
     println("Catalog audit ${report.status}: ${outputDirectory.resolve("audit-report.json")}")
     if (report.status != AuditStatus.PASS) exitProcess(2)
+}
+
+private fun runDeviceRecordPublication(args: Array<String>) {
+    val evidencePath = Path.of(argument(args, "--evidence"))
+    val expectedDigest = argument(args, "--expected-evidence-sha256")
+    val outputPath = Path.of(
+        optionalArgument(args, "--output") ?: "build/catalog-audit/verified-device-record.json",
+    )
+    when (
+        val result = DeviceVerificationPublishingPipeline().publish(
+            evidenceBytes = java.nio.file.Files.readAllBytes(evidencePath),
+            expectedEvidenceSha256 = expectedDigest,
+        )
+    ) {
+        is com.example.globalcompat.validation.DeviceRecordPublicationResult.Approved -> {
+            VerifiedDeviceRecordWriter.write(result.record, outputPath)
+            println("Verified device record awaiting manual catalog approval: $outputPath")
+        }
+        is com.example.globalcompat.validation.DeviceRecordPublicationResult.Rejected -> {
+            error("Device record publication rejected: ${result.reasons.joinToString()}")
+        }
+    }
 }
 
 private fun runValidationEvidence(args: Array<String>) {
