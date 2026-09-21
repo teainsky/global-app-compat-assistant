@@ -9,6 +9,7 @@ kotlin {
 
 dependencies {
     implementation(project(":catalog-core"))
+    implementation(project(":device-validation"))
     implementation("com.google.code.gson:gson:2.11.0")
 
     testImplementation("junit:junit:4.13.2")

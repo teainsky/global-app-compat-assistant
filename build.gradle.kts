@@ -7,6 +7,11 @@ plugins {
 
 tasks.register("testDebugUnitTest") {
     group = "verification"
-    description = "Runs app, catalog core, and catalog audit unit tests."
-    dependsOn(":app:testDebugUnitTest", ":catalog-core:test", ":catalog-audit:test")
+    description = "Runs app, catalog, audit, and device validation unit tests."
+    dependsOn(
+        ":app:testDebugUnitTest",
+        ":catalog-core:test",
+        ":catalog-audit:test",
+        ":device-validation:test",
+    )
 }

@@ -19,3 +19,19 @@ A successful audit writes `audit-report.json`, `audit-report.txt`, and `audited-
 A failed audit exits non-zero without leaving a stale audited manifest. The tool does not install
 APKs and cannot change compatibility validation, recommendation, or installation eligibility
 state.
+
+## Device validation evidence
+
+The evidence pipeline is local and read-only. It rechecks baseline component metadata against the
+trusted catalog, ignores any promotion/source fields supplied inside input JSON, and only accepts
+APK-byte evidence through the host-audit import path. It never updates `DEVICE_VERIFIED` in the
+catalog.
+
+```powershell
+.\.toolchains\gradle-8.9\bin\gradle.bat :catalog-audit:run --args="--validation-evidence --baseline device-baseline.json --output build/catalog-audit/device-validation-evidence.json"
+```
+
+When a future host audit with an exact device/system profile is available, add
+`--artifact-audit device-artifact-audit.json`. Without that input, a successful Pura 70 Pro+
+functional baseline stops at `FUNCTIONALLY_VALIDATED` and explicitly reports the missing artifact
+evidence.

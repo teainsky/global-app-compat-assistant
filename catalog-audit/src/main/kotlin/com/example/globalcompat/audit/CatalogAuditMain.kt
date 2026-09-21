@@ -12,6 +12,10 @@ fun main(args: Array<String>) {
         runDeviceAudit(args)
         return
     }
+    if ("--validation-evidence" in args) {
+        runValidationEvidence(args)
+        return
+    }
     val releaseTag = argument(args, "--release-tag")
     val outputDirectory = Path.of("build", "catalog-audit", releaseTag)
     val sdkValue = System.getenv("ANDROID_HOME")
@@ -26,6 +30,21 @@ fun main(args: Array<String>) {
     AuditReportWriter().write(report, outputDirectory)
     println("Catalog audit ${report.status}: ${outputDirectory.resolve("audit-report.json")}")
     if (report.status != AuditStatus.PASS) exitProcess(2)
+}
+
+private fun runValidationEvidence(args: Array<String>) {
+    val baselinePath = Path.of(argument(args, "--baseline"))
+    val artifactAuditPath = optionalArgument(args, "--artifact-audit")?.let(Path::of)
+    val outputPath = Path.of(
+        optionalArgument(args, "--output")
+            ?: "build/catalog-audit/device-validation-evidence.json",
+    )
+    val report = DeviceValidationEvidenceTool().evaluate(
+        baselinePath = baselinePath,
+        artifactAuditPath = artifactAuditPath,
+    )
+    DeviceValidationEvidenceWriter.write(report, outputPath)
+    println("Device validation evidence ${report.attainedLevel}: $outputPath")
 }
 
 private fun runDeviceAudit(args: Array<String>) {

@@ -18,3 +18,4 @@ rootProject.name = "global-app-compat-assistant"
 include(":app")
 include(":catalog-core")
 include(":catalog-audit")
+include(":device-validation")
