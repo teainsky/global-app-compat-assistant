@@ -541,6 +541,7 @@ private fun CompatibilityPlanCard(plan: CompatibilityPlan) {
 
 @Composable
 private fun InstallationExecutionGateCard(plan: InstallationSessionPlan) {
+    var showTechnicalDetails by remember(plan) { mutableStateOf(false) }
     val buttonText = when {
         plan.status == InstallationSessionStatus.NO_ACTION_REQUIRED -> "无需安装"
         InstallationBlockReason.HARMONYOS_5_PLUS_NOT_SUPPORTED in plan.blockReasons ->
@@ -555,32 +556,25 @@ private fun InstallationExecutionGateCard(plan: InstallationSessionPlan) {
             "安装接口尚未启用"
         else -> "安全门禁未通过，暂不可安装"
     }
-    ReportSection("安装执行安全门禁") {
+    ReportSection("配置 Google 运行环境") {
         Text(
-            text = plan.userMessage,
+            text = if (plan.executionAllowed) {
+                "正在配置 Google 运行环境"
+            } else {
+                plan.userMessage
+            },
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.SemiBold,
         )
-        plan.steps.forEach { step ->
-            val state = when (step.state) {
-                InstallationStepState.ALREADY_COMPLETED -> "已完成"
-                InstallationStepState.PENDING_DOWNLOAD -> "等待下载"
-                InstallationStepState.DOWNLOADED -> "已下载，待校验"
-                InstallationStepState.VERIFIED -> "校验通过"
-                InstallationStepState.READY_FOR_USER_CONFIRMATION -> "等待系统用户确认"
-                InstallationStepState.BLOCKED -> "已阻止"
-            }
-            Text(
-                text = "• ${step.packageName.ifBlank { step.componentId }}：$state",
-                style = MaterialTheme.typography.bodyMedium,
-            )
-        }
-        if (plan.blockReasons.isNotEmpty()) {
-            Text("阻止原因", style = MaterialTheme.typography.labelMedium)
-            plan.blockReasons.forEach { reason ->
-                Text("• ${reason.name}", style = MaterialTheme.typography.bodySmall)
-            }
-        }
+        Text("准备完成", style = MaterialTheme.typography.bodyMedium)
+        Text("↓", style = MaterialTheme.typography.bodySmall)
+        Text("安装必要组件 1/2", style = MaterialTheme.typography.bodyMedium)
+        Text("↓", style = MaterialTheme.typography.bodySmall)
+        Text("安装必要组件 2/2", style = MaterialTheme.typography.bodyMedium)
+        Text("↓", style = MaterialTheme.typography.bodySmall)
+        Text("检查环境", style = MaterialTheme.typography.bodyMedium)
+        Text("↓", style = MaterialTheme.typography.bodySmall)
+        Text("配置完成", style = MaterialTheme.typography.bodyMedium)
         OutlinedButton(
             modifier = Modifier.fillMaxWidth(),
             enabled = false,
@@ -589,9 +583,31 @@ private fun InstallationExecutionGateCard(plan: InstallationSessionPlan) {
             Text(buttonText)
         }
         Text(
-            text = "当前版本不会安装 APK，也不会调用 Android PackageInstaller；文件准备与安装门禁相互独立。",
+            text = "当前设备尚未完成发布级验证，按钮保持锁定，不会触发系统安装界面。",
             style = MaterialTheme.typography.bodySmall,
         )
+        TextButton(onClick = { showTechnicalDetails = !showTechnicalDetails }) {
+            Text(if (showTechnicalDetails) "收起技术状态" else "查看技术状态")
+        }
+        if (showTechnicalDetails) {
+            plan.steps.forEach { step ->
+                val state = when (step.state) {
+                    InstallationStepState.ALREADY_COMPLETED -> "已完成"
+                    InstallationStepState.PENDING_DOWNLOAD -> "等待下载"
+                    InstallationStepState.DOWNLOADED -> "已下载，待校验"
+                    InstallationStepState.VERIFIED -> "校验通过"
+                    InstallationStepState.READY_FOR_USER_CONFIRMATION -> "等待系统用户确认"
+                    InstallationStepState.BLOCKED -> "已阻止"
+                }
+                Text(
+                    text = "• ${step.packageName.ifBlank { step.componentId }}：$state",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+            plan.blockReasons.forEach { reason ->
+                Text("• ${reason.name}", style = MaterialTheme.typography.bodySmall)
+            }
+        }
     }
 }
 

@@ -85,16 +85,3 @@ data class InstallationSessionPlan(
     val steps: List<InstallationSessionStep>,
     val blockReasons: List<InstallationBlockReason>,
 )
-
-enum class PackageInstallerDispatchResult {
-    USER_CONFIRMATION_REQUESTED,
-    BLOCKED_BY_EXECUTION_GATE,
-}
-
-/**
- * Future Android implementation must use PackageInstaller's user-confirmation flow.
- * Task 007 intentionally provides no runtime implementation and never calls this port.
- */
-fun interface AndroidPackageInstallerUserConfirmationPort {
-    fun requestUserConfirmation(plan: InstallationSessionPlan): PackageInstallerDispatchResult
-}
