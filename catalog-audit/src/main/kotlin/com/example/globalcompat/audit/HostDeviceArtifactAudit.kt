@@ -1,9 +1,10 @@
 package com.example.globalcompat.audit
 
 import com.example.globalcompat.catalog.ArtifactIntegrityStatus
-import com.example.globalcompat.catalog.BuiltInComponentCatalog
 import com.example.globalcompat.catalog.ComponentArtifact
+import com.example.globalcompat.catalog.ComponentCatalog
 import com.example.globalcompat.catalog.InstalledArtifactSignatureStatus
+import com.example.globalcompat.catalog.RuntimeTrustedCatalogRepository
 import com.google.gson.GsonBuilder
 import java.nio.file.Files
 import java.nio.file.Path
@@ -98,10 +99,12 @@ class HostDeviceArtifactAuditor(
     private val createTemporaryDirectory: () -> Path = {
         Files.createTempDirectory("global-compat-device-audit-")
     },
+    private val catalog: ComponentCatalog? =
+        RuntimeTrustedCatalogRepository.instance.currentSnapshot()?.catalog,
 ) {
     fun audit(): HostDeviceArtifactAuditReport {
         val temporaryDirectory = createTemporaryDirectory()
-        val artifacts = BuiltInComponentCatalog.catalog.releases
+        val artifacts = catalog?.releases.orEmpty()
             .flatMap { it.artifacts }
             .filter { it.packageName in TARGET_PACKAGES }
         return try {

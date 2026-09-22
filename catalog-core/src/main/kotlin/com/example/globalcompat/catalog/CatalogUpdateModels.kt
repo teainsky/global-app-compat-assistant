@@ -30,7 +30,10 @@ interface TrustedCatalogStore {
 }
 
 data class CatalogRuntimeState(
-    val activeCatalog: ComponentCatalog,
+    val activeSnapshot: CatalogSnapshot?,
     val status: CatalogUpdateStatus,
     val detail: String,
-)
+) {
+    val activeCatalog: ComponentCatalog
+        get() = requireNotNull(activeSnapshot) { "No trusted catalog is active" }.catalog
+}

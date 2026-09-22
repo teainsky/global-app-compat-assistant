@@ -5,13 +5,14 @@ import com.example.globalcompat.baseline.OfficialComponentMatchStatus
 import com.example.globalcompat.catalog.ArtifactIntegrityStatus
 import com.example.globalcompat.catalog.ArtifactSourceRecord
 import com.example.globalcompat.catalog.ArtifactVerificationReadiness
-import com.example.globalcompat.catalog.BuiltInComponentCatalog
 import com.example.globalcompat.catalog.CatalogMatchRequest
+import com.example.globalcompat.catalog.CatalogSnapshot
 import com.example.globalcompat.catalog.CatalogSystemFamily
 import com.example.globalcompat.catalog.ComponentArtifact
 import com.example.globalcompat.catalog.ComponentCatalog
 import com.example.globalcompat.catalog.ComponentRelease
 import com.example.globalcompat.catalog.InstalledArtifactSignatureStatus
+import com.example.globalcompat.catalog.RuntimeTrustedCatalogRepository
 import com.example.globalcompat.catalog.SourceAvailabilityStatus
 import com.example.globalcompat.catalog.TrustedComponentCatalogMatcher
 import com.example.globalcompat.data.CompatibilityPlanId
@@ -20,9 +21,13 @@ import com.example.globalcompat.data.EnvironmentReport
 import com.example.globalcompat.data.RomFamily
 
 class SimulatedInstallationPlanner(
-    private val catalog: ComponentCatalog = BuiltInComponentCatalog.catalog,
+    private val catalogSnapshot: CatalogSnapshot? =
+        RuntimeTrustedCatalogRepository.instance.currentSnapshot(),
     private val catalogMatcher: TrustedComponentCatalogMatcher = TrustedComponentCatalogMatcher(),
 ) {
+    private val catalog: ComponentCatalog
+        get() = requireNotNull(catalogSnapshot) { "No trusted catalog snapshot" }.catalog
+
     fun create(
         environment: EnvironmentReport,
         comparisons: List<OfficialComponentComparison>,
@@ -84,6 +89,21 @@ class SimulatedInstallationPlanner(
                 nextAction = SimulationNextAction.STOP_INSUFFICIENT_EVIDENCE,
                 stages = stages,
                 nextActionMessage = "已停止：没有可安全使用的 catalog 规则。",
+            )
+        }
+
+        if (catalogSnapshot == null) {
+            stages += stage(
+                SimulationFlowStage.OFFICIAL_COMPONENT_SELECTION,
+                SimulationStageStatus.BLOCKED,
+                "当前没有可信 catalog，仅允许基础诊断。",
+            )
+            return result(
+                environment = environment,
+                status = SimulationPlanStatus.BLOCKED,
+                nextAction = SimulationNextAction.STOP_INSUFFICIENT_EVIDENCE,
+                stages = stages,
+                nextActionMessage = "已安全停止：没有可信 catalog snapshot。",
             )
         }
 
@@ -431,6 +451,8 @@ class SimulatedInstallationPlanner(
                 add("候选组件仍为 CANDIDATE/UNTESTED，不具备真实安装资格。")
             }
         },
+        catalogVersion = catalogSnapshot?.catalogVersion,
+        catalogDigest = catalogSnapshot?.catalogDigest,
     )
 
     private fun finalizeStages(

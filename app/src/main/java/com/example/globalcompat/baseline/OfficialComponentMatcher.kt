@@ -14,7 +14,7 @@ data class ComponentMatchContext(
 )
 
 class OfficialComponentMatcher(
-    private val catalog: ComponentCatalog,
+    private val catalog: ComponentCatalog?,
 ) {
     fun compare(
         fingerprints: List<InstalledComponentFingerprint>,
@@ -33,7 +33,7 @@ class OfficialComponentMatcher(
         context: ComponentMatchContext?,
         actualArtifactSha256: String?,
     ): OfficialComponentComparison {
-        val candidates = catalog.releases.flatMap { it.artifacts }
+        val candidates = catalog?.releases.orEmpty().flatMap { it.artifacts }
             .filter { it.packageName == fingerprint.packageName }
         val artifact = candidates.singleOrNull()
             ?: return comparison(fingerprint, null, OfficialComponentMatchStatus.UNKNOWN)

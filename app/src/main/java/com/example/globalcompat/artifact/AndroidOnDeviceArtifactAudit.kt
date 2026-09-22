@@ -5,6 +5,7 @@ import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
 import android.os.Build
 import com.example.globalcompat.baseline.AndroidInstalledPackageLookup
+import com.example.globalcompat.catalog.CatalogSnapshot
 import com.example.globalcompat.validation.ValidationDeviceProfile
 import com.example.globalcompat.validation.ValidationSystemProfile
 import java.io.File
@@ -80,17 +81,15 @@ class AndroidApkByteDigestReader : ApkByteDigestReader {
 }
 
 class AndroidOnDeviceArtifactAuditService(
-    context: Context,
+    private val context: Context,
 ) {
-    private val auditor = OnDeviceArtifactAuditor(
-        installedApkLookup = AndroidInstalledApkPathLookup(context.packageManager),
-        digestReader = AndroidApkByteDigestReader(),
-    )
-
     fun audit(
         deviceProfile: ValidationDeviceProfile,
         systemProfile: ValidationSystemProfile,
-    ): OnDeviceArtifactAuditReport = auditor.audit(
-        OnDeviceArtifactAuditRequest(deviceProfile, systemProfile),
-    )
+        catalogSnapshot: CatalogSnapshot?,
+    ): OnDeviceArtifactAuditReport = OnDeviceArtifactAuditor(
+        catalogSnapshot = catalogSnapshot,
+        installedApkLookup = AndroidInstalledApkPathLookup(context.packageManager),
+        digestReader = AndroidApkByteDigestReader(),
+    ).audit(OnDeviceArtifactAuditRequest(deviceProfile, systemProfile))
 }

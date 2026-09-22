@@ -2,6 +2,7 @@ package com.example.globalcompat.artifact
 
 import com.example.globalcompat.baseline.OfficialComponentMatcher
 import com.example.globalcompat.catalog.BuiltInComponentCatalog
+import com.example.globalcompat.catalog.asTestSnapshot
 import com.example.globalcompat.validation.DeviceValidationEvidenceLevel
 import com.example.globalcompat.validation.ValidationDeviceProfile
 import com.example.globalcompat.validation.ValidationEvidenceSource
@@ -138,7 +139,7 @@ class OnDeviceArtifactAuditorTest {
             }
         }
         return OnDeviceArtifactAuditor(
-            catalog = catalog,
+            catalogSnapshot = catalog.asTestSnapshot(),
             installedApkLookup = lookup,
             digestReader = digestReader,
             clock = { 1_700_000_000_000L },

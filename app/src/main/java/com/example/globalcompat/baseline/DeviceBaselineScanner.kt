@@ -2,7 +2,9 @@ package com.example.globalcompat.baseline
 
 import android.content.Context
 import com.example.globalcompat.artifact.OnDeviceArtifactAuditReport
-import com.example.globalcompat.catalog.BuiltInComponentCatalog
+import com.example.globalcompat.catalog.CatalogSnapshot
+import com.example.globalcompat.catalog.RuntimeTrustedCatalogRepository
+import com.example.globalcompat.catalog.TrustedCatalogRepository
 import com.example.globalcompat.data.DeviceEnvironmentScanner
 import com.example.globalcompat.data.EnvironmentReport
 import com.example.globalcompat.installation.InstallationExecutionGate
@@ -15,23 +17,21 @@ data class DeviceBaselineScanResult(
     val componentComparisons: List<OfficialComponentComparison>,
     val simulatedInstallationPlan: SimulatedInstallationPlan,
     val installationSessionPlan: InstallationSessionPlan,
+    val catalogSnapshot: CatalogSnapshot?,
 )
 
 class DeviceBaselineScanner(
-    context: Context,
-    private val environmentScanner: DeviceEnvironmentScanner = DeviceEnvironmentScanner(context),
+    private val context: Context,
+    private val catalogRepository: TrustedCatalogRepository =
+        RuntimeTrustedCatalogRepository.instance,
     private val fingerprintScanner: InstalledComponentFingerprintScanner =
         InstalledComponentFingerprintScanner(AndroidInstalledPackageLookup(context.packageManager)),
-    private val componentMatcher: OfficialComponentMatcher =
-        OfficialComponentMatcher(BuiltInComponentCatalog.catalog),
-    private val simulatedInstallationPlanner: SimulatedInstallationPlanner =
-        SimulatedInstallationPlanner(BuiltInComponentCatalog.catalog),
-    private val installationExecutionGate: InstallationExecutionGate =
-        InstallationExecutionGate(BuiltInComponentCatalog.catalog),
 ) {
     fun scan(): DeviceBaselineScanResult {
-        val environment = environmentScanner.scan()
+        val snapshot = catalogRepository.currentSnapshot()
+        val environment = DeviceEnvironmentScanner(context, catalogSnapshot = snapshot).scan()
         val fingerprints = fingerprintScanner.scan()
+        val componentMatcher = OfficialComponentMatcher(snapshot?.catalog)
         val comparisons = componentMatcher.compare(
             fingerprints = fingerprints,
             context = ComponentMatchContext(
@@ -40,7 +40,7 @@ class DeviceBaselineScanner(
                 romVersion = environment.rom.version,
             ),
         )
-        val simulatedPlan = simulatedInstallationPlanner.create(
+        val simulatedPlan = SimulatedInstallationPlanner(snapshot).create(
             environment = environment,
             comparisons = comparisons,
         )
@@ -48,7 +48,8 @@ class DeviceBaselineScanner(
             environment = environment,
             componentComparisons = comparisons,
             simulatedInstallationPlan = simulatedPlan,
-            installationSessionPlan = installationExecutionGate.evaluate(simulatedPlan),
+            installationSessionPlan = InstallationExecutionGate(snapshot).evaluate(simulatedPlan),
+            catalogSnapshot = snapshot,
         )
     }
 
@@ -56,10 +57,11 @@ class DeviceBaselineScanner(
         scanResult: DeviceBaselineScanResult,
         auditReport: OnDeviceArtifactAuditReport,
     ): DeviceBaselineScanResult {
+        val snapshot = scanResult.catalogSnapshot
         val auditedHashes = auditReport.components.mapNotNull { component ->
             component.installedApkSha256?.let { component.packageName to it }
         }.toMap()
-        val comparisons = componentMatcher.compare(
+        val comparisons = OfficialComponentMatcher(snapshot?.catalog).compare(
             fingerprints = scanResult.componentComparisons.map { it.fingerprint },
             context = ComponentMatchContext(
                 manufacturer = scanResult.environment.device.manufacturer,
@@ -68,14 +70,14 @@ class DeviceBaselineScanner(
             ),
             actualArtifactSha256ByPackage = auditedHashes,
         )
-        val simulatedPlan = simulatedInstallationPlanner.create(
+        val simulatedPlan = SimulatedInstallationPlanner(snapshot).create(
             environment = scanResult.environment,
             comparisons = comparisons,
         )
         return scanResult.copy(
             componentComparisons = comparisons,
             simulatedInstallationPlan = simulatedPlan,
-            installationSessionPlan = installationExecutionGate.evaluate(simulatedPlan),
+            installationSessionPlan = InstallationExecutionGate(snapshot).evaluate(simulatedPlan),
         )
     }
 }

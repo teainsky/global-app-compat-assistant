@@ -1,13 +1,14 @@
 package com.example.globalcompat.installation
 
 import com.example.globalcompat.catalog.ArtifactSourceRecord
-import com.example.globalcompat.catalog.BuiltInComponentCatalog
 import com.example.globalcompat.catalog.CatalogMatchRequest
+import com.example.globalcompat.catalog.CatalogSnapshot
 import com.example.globalcompat.catalog.CatalogSelection
 import com.example.globalcompat.catalog.CatalogSystemFamily
 import com.example.globalcompat.catalog.ComponentArtifact
 import com.example.globalcompat.catalog.ComponentCatalog
 import com.example.globalcompat.catalog.ComponentRelease
+import com.example.globalcompat.catalog.RuntimeTrustedCatalogRepository
 import com.example.globalcompat.catalog.TrustedComponentCatalogMatcher
 import com.example.globalcompat.data.CompatibilityPlanId
 import com.example.globalcompat.data.CompatibilityDecisionStatus
@@ -21,14 +22,30 @@ import com.example.globalcompat.simulation.SimulationNextAction
 import com.example.globalcompat.simulation.SimulationPlanStatus
 
 class InstallationExecutionGate(
-    private val catalog: ComponentCatalog = BuiltInComponentCatalog.catalog,
+    private val catalogSnapshot: CatalogSnapshot? =
+        RuntimeTrustedCatalogRepository.instance.currentSnapshot(),
 ) {
-    private val gatePolicy = catalog.installationGatePolicy
+    private val catalog: ComponentCatalog
+        get() = requireNotNull(catalogSnapshot) { "No trusted catalog snapshot" }.catalog
+    private val gatePolicy
+        get() = catalog.installationGatePolicy
 
     fun evaluate(
         simulatedPlan: SimulatedInstallationPlan,
         verificationResults: Map<String, ArtifactVerificationResult> = emptyMap(),
     ): InstallationSessionPlan {
+        val snapshot = catalogSnapshot ?: return blockedPlan(
+            simulatedPlan,
+            listOf(InstallationBlockReason.TRUSTED_CATALOG_UNAVAILABLE),
+        )
+        if (simulatedPlan.catalogVersion != snapshot.catalogVersion ||
+            simulatedPlan.catalogDigest != snapshot.catalogDigest
+        ) {
+            return blockedPlan(
+                simulatedPlan,
+                listOf(InstallationBlockReason.CATALOG_SNAPSHOT_MISMATCH),
+            )
+        }
         if ((gatePolicy.blockHarmonyOs5PlusLegacyPlan &&
                 simulatedPlan.deviceCategory == DeviceCategory.HARMONYOS_5_PLUS) ||
             simulatedPlan.nextAction == SimulationNextAction.STOP_UNSUPPORTED_SYSTEM
@@ -62,6 +79,8 @@ class InstallationExecutionGate(
                     completedStep(artifact)
                 },
                 blockReasons = emptyList(),
+                catalogVersion = snapshot.catalogVersion,
+                catalogDigest = snapshot.catalogDigest,
             )
         }
         if (simulatedPlan.validationLevel != GlobalValidationLevel.DEVICE_VERIFIED) {
@@ -148,6 +167,8 @@ class InstallationExecutionGate(
                 userMessage = blockMessage(blockReasons),
                 steps = completeSteps,
                 blockReasons = blockReasons,
+                catalogVersion = snapshot.catalogVersion,
+                catalogDigest = snapshot.catalogDigest,
             )
         }
 
@@ -168,6 +189,8 @@ class InstallationExecutionGate(
             userMessage = "所有门禁已通过；未来实现仍必须由 Android 系统请求用户确认。",
             steps = completeSteps,
             blockReasons = emptyList(),
+            catalogVersion = snapshot.catalogVersion,
+            catalogDigest = snapshot.catalogDigest,
         )
     }
 
@@ -275,6 +298,8 @@ class InstallationExecutionGate(
             expectedSha256 = artifact.sha256 ?: return null,
             expectedSigningCertificateSha256 =
                 artifact.signingCertificateDigest ?: return null,
+            catalogVersion = catalogSnapshot?.catalogVersion,
+            catalogDigest = catalogSnapshot?.catalogDigest,
         )
     }
 
@@ -394,6 +419,8 @@ class InstallationExecutionGate(
             )
         },
         blockReasons = reasons.distinct(),
+        catalogVersion = catalogSnapshot?.catalogVersion,
+        catalogDigest = catalogSnapshot?.catalogDigest,
     )
 
     private fun compatibilityBlockReasons(
@@ -445,6 +472,10 @@ class InstallationExecutionGate(
             "当前没有已验证可执行方案，暂不可安装"
         InstallationBlockReason.DOWNLOAD_EVIDENCE_MISSING in reasons ->
             "缺少下载与本地校验证据，暂不可安装"
+        InstallationBlockReason.TRUSTED_CATALOG_UNAVAILABLE in reasons ->
+            "没有可信 catalog，仅允许基础诊断"
+        InstallationBlockReason.CATALOG_SNAPSHOT_MISMATCH in reasons ->
+            "规则版本不一致，安装已被安全门禁阻止"
         else -> "安装前置证据不足，已安全停止"
     }
 

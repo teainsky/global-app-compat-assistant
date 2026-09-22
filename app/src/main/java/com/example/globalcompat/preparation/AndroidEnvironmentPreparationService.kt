@@ -4,9 +4,7 @@ import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
 import androidx.core.content.pm.PackageInfoCompat
-import com.example.globalcompat.catalog.BuiltInComponentCatalog
-import com.example.globalcompat.catalog.CatalogRuntimeState
-import com.example.globalcompat.catalog.CatalogUpdateStatus
+import com.example.globalcompat.catalog.CatalogSnapshot
 import java.io.File
 import java.io.IOException
 import java.net.HttpURLConnection
@@ -15,24 +13,19 @@ import java.security.MessageDigest
 import javax.net.ssl.HttpsURLConnection
 
 class AndroidEnvironmentPreparationService(
-    context: Context,
+    private val context: Context,
 ) {
-    private val coordinator = EnvironmentPreparationCoordinator(
-        catalogState = CatalogRuntimeState(
-            activeCatalog = BuiltInComponentCatalog.catalog,
-            status = CatalogUpdateStatus.BUILT_IN,
-            detail = "APK built-in catalog signature verified",
-        ),
+    fun prepare(
+        request: EnvironmentPreparationRequest,
+        catalogSnapshot: CatalogSnapshot?,
+        cancellation: PreparationCancellation,
+        onProgress: (EnvironmentPreparationProgress) -> Unit,
+    ): EnvironmentPreparationResult = EnvironmentPreparationCoordinator(
+        catalogSnapshot = catalogSnapshot,
         downloadTransport = HttpsOfficialArtifactDownloadTransport(),
         apkInspector = AndroidDownloadedApkInspector(context.packageManager),
         privateTemporaryDirectory = File(context.cacheDir, PRIVATE_DIRECTORY_NAME),
-    )
-
-    fun prepare(
-        request: EnvironmentPreparationRequest,
-        cancellation: PreparationCancellation,
-        onProgress: (EnvironmentPreparationProgress) -> Unit,
-    ): EnvironmentPreparationResult = coordinator.prepare(request, cancellation, onProgress)
+    ).prepare(request, cancellation, onProgress)
 
     private companion object {
         const val PRIVATE_DIRECTORY_NAME = "official-component-preparation"

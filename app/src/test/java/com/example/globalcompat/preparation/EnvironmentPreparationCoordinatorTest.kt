@@ -1,9 +1,9 @@
 package com.example.globalcompat.preparation
 
 import com.example.globalcompat.catalog.BuiltInComponentCatalog
-import com.example.globalcompat.catalog.CatalogRuntimeState
 import com.example.globalcompat.catalog.CatalogUpdateStatus
 import com.example.globalcompat.catalog.ComponentCatalog
+import com.example.globalcompat.catalog.asTestSnapshot
 import com.example.globalcompat.data.CompatibilityPlanId
 import com.example.globalcompat.data.CompatibilityDecisionStatus
 import com.example.globalcompat.data.DeviceCategory
@@ -32,6 +32,8 @@ class EnvironmentPreparationCoordinatorTest {
         assertEquals(2, result.preparedComponents.size)
         assertTrue(result.preparedComponents.all { it.file.isFile && it.sizeBytes > 0L })
         assertEquals(2, fixture.transport.calls)
+        assertEquals(HARMONY_42_REQUEST.catalogVersion, result.catalogVersion)
+        assertEquals(HARMONY_42_REQUEST.catalogDigest, result.catalogDigest)
     }
 
     @Test
@@ -244,7 +246,11 @@ class EnvironmentPreparationCoordinatorTest {
         val directory = File(temporaryFolder.root, "private-preparation")
         return Fixture(
             coordinator = EnvironmentPreparationCoordinator(
-                catalogState = CatalogRuntimeState(catalog, catalogStatus, "test"),
+                catalogSnapshot = if (catalogStatus in TRUSTED_STATUSES) {
+                    catalog.asTestSnapshot()
+                } else {
+                    null
+                },
                 downloadTransport = transport,
                 apkInspector = inspector,
                 privateTemporaryDirectory = directory,
@@ -318,6 +324,10 @@ class EnvironmentPreparationCoordinatorTest {
     }
 
     private companion object {
+        val TRUSTED_STATUSES = setOf(
+            CatalogUpdateStatus.BUILT_IN,
+            CatalogUpdateStatus.REMOTE_VERIFIED,
+        )
         val HARMONY_42_REQUEST = EnvironmentPreparationRequest(
             deviceCategory = DeviceCategory.HUAWEI_HARMONY_ANDROID_COMPAT,
             planId = CompatibilityPlanId.HUAWEI_MICROG_COMPAT_PLAN,
@@ -326,6 +336,8 @@ class EnvironmentPreparationCoordinatorTest {
             androidApiLevel = 31,
             validationLevel = GlobalValidationLevel.PROBABLE,
             compatibilityDecisionStatus = CompatibilityDecisionStatus.DIAGNOSTIC_ONLY,
+            catalogVersion = BuiltInComponentCatalog.catalog.catalogVersion,
+            catalogDigest = BuiltInComponentCatalog.catalog.asTestSnapshot().catalogDigest,
         )
         val EXACT_VERIFIED_REQUEST = HARMONY_42_REQUEST.copy(
             deviceModel = "HBN-AL80",

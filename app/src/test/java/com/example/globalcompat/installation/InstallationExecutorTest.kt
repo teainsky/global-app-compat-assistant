@@ -225,6 +225,8 @@ class InstallationExecutorTest {
                 failures = emptyList(),
                 installationAllowed = true,
                 technicalDetails = emptyList(),
+                catalogVersion = CATALOG_VERSION,
+                catalogDigest = CATALOG_DIGEST,
             ),
         )
         val store = MemoryStore()
@@ -319,6 +321,8 @@ class InstallationExecutorTest {
                         sourceAssetId = (index + 1).toLong(),
                         expectedSha256 = SHA256,
                         expectedSigningCertificateSha256 = SIGNER,
+                        catalogVersion = CATALOG_VERSION,
+                        catalogDigest = CATALOG_DIGEST,
                     ),
                     verificationResult = ArtifactVerificationResult(
                         componentId = spec.componentId,
@@ -336,6 +340,8 @@ class InstallationExecutorTest {
                 )
             },
             blockReasons = emptyList(),
+            catalogVersion = CATALOG_VERSION,
+            catalogDigest = CATALOG_DIGEST,
         )
     }
 
@@ -441,5 +447,8 @@ class InstallationExecutorTest {
             "a44ce933e2336d3340eb82ad3bb28bba03bc56a7b3cf3c98250a225c55b572de"
         const val SIGNER =
             "9bd06727e62796c0130eb6dab39b73157451582cbd138e86c468acc395d14165"
+        const val CATALOG_VERSION = 1L
+        const val CATALOG_DIGEST =
+            "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
     }
 }

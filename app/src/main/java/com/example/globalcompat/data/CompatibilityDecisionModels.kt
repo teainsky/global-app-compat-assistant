@@ -44,4 +44,6 @@ data class CompatibilityDecision(
     val blockers: List<DecisionMessage>,
     val warnings: List<DecisionMessage>,
     val nextAction: CompatibilityNextAction,
+    val catalogVersion: Long? = null,
+    val catalogDigest: String? = null,
 )

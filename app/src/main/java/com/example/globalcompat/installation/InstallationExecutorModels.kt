@@ -24,6 +24,7 @@ enum class InstallationExecutionFailure {
     PREPARATION_NOT_INSTALLABLE,
     HARMONYOS_5_PLUS_NOT_SUPPORTED,
     SESSION_PLAN_INVALID,
+    CATALOG_SNAPSHOT_MISMATCH,
     PREPARED_ARTIFACT_MISSING,
     PREPARED_ARTIFACT_REVALIDATION_FAILED,
     INSTALL_PERMISSION_DENIED,
@@ -70,6 +71,8 @@ data class InstallationExecutionSnapshot(
     val failure: InstallationExecutionFailure?,
     val userMessage: String,
     val updatedAtEpochMillis: Long,
+    val catalogVersion: Long? = null,
+    val catalogDigest: String? = null,
 )
 
 data class PreparedArtifactValidation(

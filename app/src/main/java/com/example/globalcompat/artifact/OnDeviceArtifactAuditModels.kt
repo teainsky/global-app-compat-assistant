@@ -75,6 +75,8 @@ data class OnDeviceArtifactAuditReport(
     val artifactEvidence: ValidationArtifactEvidence,
     val attainedEvidenceLevel: DeviceValidationEvidenceLevel?,
     val auditedAtEpochMillis: Long,
+    val catalogVersion: Long? = null,
+    val catalogDigest: String? = null,
 )
 
 fun interface InstalledApkPathLookup {

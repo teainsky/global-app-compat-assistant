@@ -2,16 +2,15 @@ package com.example.globalcompat.artifact
 
 import com.example.globalcompat.baseline.OfficialComponentMatcher
 import com.example.globalcompat.catalog.ArtifactIntegrityStatus
-import com.example.globalcompat.catalog.BuiltInComponentCatalog
+import com.example.globalcompat.catalog.CatalogSnapshot
 import com.example.globalcompat.catalog.ComponentArtifact
-import com.example.globalcompat.catalog.ComponentCatalog
 import com.example.globalcompat.validation.DeviceValidationEvidenceLevel
 import com.example.globalcompat.validation.ValidationArtifactComponentEvidence
 import com.example.globalcompat.validation.ValidationArtifactEvidence
 import com.example.globalcompat.validation.ValidationEvidenceSource
 
 class OnDeviceArtifactAuditor(
-    private val catalog: ComponentCatalog = BuiltInComponentCatalog.catalog,
+    private val catalogSnapshot: CatalogSnapshot?,
     private val installedApkLookup: InstalledApkPathLookup,
     private val digestReader: ApkByteDigestReader,
     private val clock: () -> Long = System::currentTimeMillis,
@@ -56,6 +55,8 @@ class OnDeviceArtifactAuditor(
                 null
             },
             auditedAtEpochMillis = clock(),
+            catalogVersion = catalogSnapshot?.catalogVersion,
+            catalogDigest = catalogSnapshot?.catalogDigest,
         )
     }
 
@@ -63,7 +64,7 @@ class OnDeviceArtifactAuditor(
         packageName: String,
         request: OnDeviceArtifactAuditRequest,
     ): OnDeviceArtifactComponentResult {
-        val artifact = catalog.releases.flatMap { it.artifacts }
+        val artifact = catalogSnapshot?.catalog?.releases.orEmpty().flatMap { it.artifacts }
             .filter { it.packageName == packageName }
             .singleOrNull()
             ?.takeIf { it.hasAuditedMetadata() }

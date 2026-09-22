@@ -2,10 +2,9 @@ package com.example.globalcompat.preparation
 
 import com.example.globalcompat.catalog.ArtifactIntegrityStatus
 import com.example.globalcompat.catalog.ArtifactSourceRecord
-import com.example.globalcompat.catalog.CatalogRuntimeState
 import com.example.globalcompat.catalog.CatalogMatchRequest
+import com.example.globalcompat.catalog.CatalogSnapshot
 import com.example.globalcompat.catalog.CatalogSystemFamily
-import com.example.globalcompat.catalog.CatalogUpdateStatus
 import com.example.globalcompat.catalog.CompatibilityValidationStatus
 import com.example.globalcompat.catalog.ComponentArtifact
 import com.example.globalcompat.catalog.ComponentRelease
@@ -23,7 +22,7 @@ import java.net.URI
 import java.security.MessageDigest
 
 class EnvironmentPreparationCoordinator(
-    private val catalogState: CatalogRuntimeState,
+    private val catalogSnapshot: CatalogSnapshot?,
     private val downloadTransport: OfficialArtifactDownloadTransport,
     private val apkInspector: DownloadedApkInspector,
     private val privateTemporaryDirectory: File,
@@ -112,6 +111,8 @@ class EnvironmentPreparationCoordinator(
                 failures = emptyList(),
                 installationAllowed = selection.installationAllowed,
                 technicalDetails = technicalDetails,
+                catalogVersion = catalogSnapshot?.catalogVersion,
+                catalogDigest = catalogSnapshot?.catalogDigest,
             )
         } catch (_: PreparationCancelledException) {
             cleanupSessionDirectory()
@@ -133,6 +134,8 @@ class EnvironmentPreparationCoordinator(
                 failures = listOf(EnvironmentPreparationFailure.USER_CANCELLED),
                 installationAllowed = false,
                 technicalDetails = listOf("Preparation cancelled by user"),
+                catalogVersion = catalogSnapshot?.catalogVersion,
+                catalogDigest = catalogSnapshot?.catalogDigest,
             )
         } catch (error: DownloadFailedException) {
             cleanupSessionDirectory()
@@ -234,12 +237,20 @@ class EnvironmentPreparationCoordinator(
     }
 
     private fun selectArtifacts(request: EnvironmentPreparationRequest): SelectionResult {
-        if (catalogState.status !in TRUSTED_CATALOG_STATUSES) {
+        val snapshot = catalogSnapshot
+            ?: return SelectionResult.Rejected(
+                EnvironmentPreparationFailure.CATALOG_NOT_TRUSTED,
+                "No trusted catalog snapshot",
+            )
+        if (request.catalogVersion != snapshot.catalogVersion ||
+            request.catalogDigest != snapshot.catalogDigest
+        ) {
             return SelectionResult.Rejected(
                 EnvironmentPreparationFailure.CATALOG_NOT_TRUSTED,
-                "Catalog status is ${catalogState.status}",
+                "Request catalog identity does not match the fixed snapshot",
             )
         }
+        val catalog = snapshot.catalog
         if (request.deviceCategory == DeviceCategory.HARMONYOS_5_PLUS ||
             request.deviceCategory != DeviceCategory.HUAWEI_HARMONY_ANDROID_COMPAT ||
             request.planId != CompatibilityPlanId.HUAWEI_MICROG_COMPAT_PLAN
@@ -255,7 +266,7 @@ class EnvironmentPreparationCoordinator(
                 "HarmonyOS version is required",
             )
         val selection = TrustedComponentCatalogMatcher().select(
-            catalogState.activeCatalog,
+            catalog,
             CatalogMatchRequest(
                 planId = request.planId,
                 deviceCategory = request.deviceCategory,
@@ -276,14 +287,14 @@ class EnvironmentPreparationCoordinator(
                     EnvironmentPreparationFailure.CATALOG_METADATA_INVALID,
                     "Missing or duplicate artifact: $componentId",
                 )
-            val source = catalogState.activeCatalog.sourceRecords.singleOrNull { record ->
+            val source = catalog.sourceRecords.singleOrNull { record ->
                 record.matches(release, artifact)
             } ?: return SelectionResult.Rejected(
                 EnvironmentPreparationFailure.OFFICIAL_SOURCE_UNAVAILABLE,
                 "No unique official GitHub asset for $componentId",
             )
             if (!artifact.hasTrustedDownloadMetadata() ||
-                catalogState.activeCatalog.isBlocked(artifact, request)
+                catalog.isBlocked(artifact, request)
             ) {
                 return SelectionResult.Rejected(
                     EnvironmentPreparationFailure.CATALOG_METADATA_INVALID,
@@ -382,6 +393,8 @@ class EnvironmentPreparationCoordinator(
             failures = failures.distinct(),
             installationAllowed = false,
             technicalDetails = listOf(detail),
+            catalogVersion = catalogSnapshot?.catalogVersion,
+            catalogDigest = catalogSnapshot?.catalogDigest,
         )
     }
 
@@ -458,10 +471,6 @@ class EnvironmentPreparationCoordinator(
     private class PreparationCancelledException : Exception()
 
     private companion object {
-        val TRUSTED_CATALOG_STATUSES = setOf(
-            CatalogUpdateStatus.BUILT_IN,
-            CatalogUpdateStatus.REMOTE_VERIFIED,
-        )
         val REQUIRED_COMPONENT_IDS = listOf(
             "microg_services_huawei_compatible",
             "microg_companion_huawei_compatible",

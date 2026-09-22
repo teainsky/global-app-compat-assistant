@@ -14,6 +14,7 @@ class CatalogUpdateManagerTest {
     private val gson = Gson()
     private val signingKey = newKeyPair()
     private val store = MemoryCatalogStore()
+    private val repository = TrustedCatalogRepository.withBuiltIn()
     private val manager = manager(signingKey, store)
     private val baseVersion = BuiltInComponentCatalog.catalog.catalogVersion
 
@@ -24,6 +25,8 @@ class CatalogUpdateManagerTest {
         assertEquals(CatalogUpdateStatus.REMOTE_VERIFIED, state.status)
         assertEquals(baseVersion + 1, state.activeCatalog.catalogVersion)
         assertEquals(baseVersion + 1, manager.current().activeCatalog.catalogVersion)
+        assertEquals(CatalogSnapshotSource.REMOTE_VERIFIED, state.activeSnapshot?.source)
+        assertEquals(64, state.activeSnapshot?.catalogDigest?.length)
     }
 
     @Test
@@ -42,12 +45,14 @@ class CatalogUpdateManagerTest {
 
     @Test
     fun `signature from a different key is rejected`() {
+        val before = repository.currentSnapshot()
         val state = manager.refresh(
             source(signed(catalogVersion = baseVersion + 1, keyPair = newKeyPair())),
         )
 
         assertEquals(CatalogUpdateStatus.REMOTE_REJECTED, state.status)
         assertEquals(baseVersion, state.activeCatalog.catalogVersion)
+        assertEquals(before, repository.currentSnapshot())
     }
 
     @Test
@@ -110,6 +115,21 @@ class CatalogUpdateManagerTest {
 
         assertEquals(CatalogUpdateStatus.BUILT_IN, state.status)
         assertEquals(BuiltInComponentCatalog.catalog, state.activeCatalog)
+        assertEquals(CatalogSnapshotSource.BUILT_IN, state.activeSnapshot?.source)
+    }
+
+    @Test
+    fun `captured v10 snapshot stays immutable while new session receives v11`() {
+        manager.refresh(source(signed(catalogVersion = 10)))
+        val v10Session = requireNotNull(repository.currentSnapshot())
+
+        manager.refresh(source(signed(catalogVersion = 11)))
+        val v11Session = requireNotNull(repository.currentSnapshot())
+
+        assertEquals(10L, v10Session.catalogVersion)
+        assertEquals(11L, v11Session.catalogVersion)
+        assertTrue(v10Session.catalogDigest != v11Session.catalogDigest)
+        assertEquals(10L, v10Session.catalog.catalogVersion)
     }
 
     @Test
@@ -193,7 +213,7 @@ class CatalogUpdateManagerTest {
         keyPair: KeyPair,
         snapshotStore: TrustedCatalogStore,
     ) = CatalogUpdateManager(
-        builtInCatalog = BuiltInComponentCatalog.catalog,
+        repository = repository,
         signatureVerifier = CatalogSignatureVerifier(keyPair.public.encoded),
         store = snapshotStore,
         clientVersion = BuiltInComponentCatalog.CLIENT_VERSION,

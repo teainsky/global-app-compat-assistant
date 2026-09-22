@@ -1,16 +1,18 @@
 package com.example.globalcompat.data
 
-import com.example.globalcompat.catalog.BuiltInComponentCatalog
+import com.example.globalcompat.catalog.CatalogSnapshot
 import com.example.globalcompat.catalog.DeviceClassificationRule
+import com.example.globalcompat.catalog.RuntimeTrustedCatalogRepository
 
 fun interface CompatibilityPlanMatcher {
     fun match(context: CompatibilityContext): CompatibilityPlan
 }
 
 class RuleBasedCompatibilityPlanMatcher(
-    private val deviceRules: List<DeviceClassificationRule> =
-        BuiltInComponentCatalog.catalog.deviceRules,
+    catalogSnapshot: CatalogSnapshot? = RuntimeTrustedCatalogRepository.instance.currentSnapshot(),
 ) : CompatibilityPlanMatcher {
+    private val deviceRules: List<DeviceClassificationRule> =
+        catalogSnapshot?.catalog?.deviceRules.orEmpty()
     override fun match(context: CompatibilityContext): CompatibilityPlan {
         val baseEvidence = buildList {
             add(

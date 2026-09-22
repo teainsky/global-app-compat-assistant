@@ -3,10 +3,11 @@ package com.example.globalcompat.audit
 import com.example.globalcompat.catalog.ArtifactDescriptor
 import com.example.globalcompat.catalog.ArtifactIntegrityStatus
 import com.example.globalcompat.catalog.ArtifactSourceRecord
-import com.example.globalcompat.catalog.BuiltInComponentCatalog
+import com.example.globalcompat.catalog.ComponentCatalog
 import com.example.globalcompat.catalog.ComponentArtifact
 import com.example.globalcompat.catalog.ComponentSourceType
 import com.example.globalcompat.catalog.SourceAvailabilityStatus
+import com.example.globalcompat.catalog.RuntimeTrustedCatalogRepository
 import java.nio.file.Files
 import java.nio.file.Path
 import java.security.MessageDigest
@@ -18,10 +19,13 @@ class CatalogAuditEngine(
     private val downloader: OfficialArtifactDownloader,
     private val apkInspector: ApkInspector,
     private val clock: Clock = Clock.systemUTC(),
+    private val catalog: ComponentCatalog? =
+        RuntimeTrustedCatalogRepository.instance.currentSnapshot()?.catalog,
 ) {
     fun audit(releaseTag: String, outputDirectory: Path): CatalogAuditReport {
         val auditedAt = Instant.now(clock).toString()
-        val catalogRelease = BuiltInComponentCatalog.catalog.releases
+        val catalogRelease = catalog?.releases
+            .orEmpty()
             .singleOrNull { it.releaseTag == releaseTag }
             ?: return failedReport(
                 releaseTag,

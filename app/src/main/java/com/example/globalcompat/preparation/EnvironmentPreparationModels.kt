@@ -46,6 +46,8 @@ data class EnvironmentPreparationRequest(
     val androidApiLevel: Int,
     val validationLevel: GlobalValidationLevel,
     val compatibilityDecisionStatus: CompatibilityDecisionStatus,
+    val catalogVersion: Long? = null,
+    val catalogDigest: String? = null,
 )
 
 data class EnvironmentPreparationProgress(
@@ -74,6 +76,8 @@ data class EnvironmentPreparationResult(
     val failures: List<EnvironmentPreparationFailure>,
     val installationAllowed: Boolean,
     val technicalDetails: List<String>,
+    val catalogVersion: Long? = null,
+    val catalogDigest: String? = null,
 )
 
 class PreparationCancellation {

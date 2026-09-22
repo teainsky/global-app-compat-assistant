@@ -15,6 +15,8 @@ data class ArtifactDownloadRequest(
     val sourceAssetId: Long,
     val expectedSha256: String,
     val expectedSigningCertificateSha256: String,
+    val catalogVersion: Long? = null,
+    val catalogDigest: String? = null,
 )
 
 data class ArtifactVerificationResult(
@@ -46,6 +48,8 @@ enum class InstallationStepState {
 }
 
 enum class InstallationBlockReason {
+    TRUSTED_CATALOG_UNAVAILABLE,
+    CATALOG_SNAPSHOT_MISMATCH,
     DEVICE_BRANCH_NOT_ALLOWED,
     HARMONYOS_5_PLUS_NOT_SUPPORTED,
     SIMULATION_PLAN_BLOCKED,
@@ -85,4 +89,6 @@ data class InstallationSessionPlan(
     val userMessage: String,
     val steps: List<InstallationSessionStep>,
     val blockReasons: List<InstallationBlockReason>,
+    val catalogVersion: Long? = null,
+    val catalogDigest: String? = null,
 )

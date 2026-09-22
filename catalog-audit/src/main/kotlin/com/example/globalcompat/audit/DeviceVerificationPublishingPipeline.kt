@@ -1,11 +1,11 @@
 package com.example.globalcompat.audit
 
 import com.example.globalcompat.catalog.ArtifactIntegrityStatus
-import com.example.globalcompat.catalog.BuiltInComponentCatalog
 import com.example.globalcompat.catalog.CompatibilityValidationStatus
 import com.example.globalcompat.catalog.ComponentArtifact
 import com.example.globalcompat.catalog.ComponentCatalog
 import com.example.globalcompat.catalog.ComponentVariant
+import com.example.globalcompat.catalog.RuntimeTrustedCatalogRepository
 import com.example.globalcompat.data.CompatibilityPlanId
 import com.example.globalcompat.data.DeviceCategory
 import com.example.globalcompat.validation.DeviceRecordPublicationRejection
@@ -24,7 +24,8 @@ import java.nio.file.Path
 import java.security.MessageDigest
 
 class DeviceVerificationPublishingPipeline(
-    private val catalog: ComponentCatalog = BuiltInComponentCatalog.catalog,
+    private val catalog: ComponentCatalog? =
+        RuntimeTrustedCatalogRepository.instance.currentSnapshot()?.catalog,
     private val promotionPolicy: DeviceValidationPromotionPolicy =
         DeviceValidationPromotionPolicy(),
     private val gson: Gson = Gson(),
@@ -42,6 +43,8 @@ class DeviceVerificationPublishingPipeline(
         evidenceBytes: ByteArray,
         expectedEvidenceSha256: String,
     ): DeviceRecordPublicationResult {
+        val catalog = catalog
+            ?: return rejected(DeviceRecordPublicationRejection.EVIDENCE_INCOMPLETE)
         val expectedDigest = expectedEvidenceSha256.normalizeDigest()
         if (!SHA256.matches(expectedDigest)) {
             return rejected(DeviceRecordPublicationRejection.EVIDENCE_DIGEST_INVALID)

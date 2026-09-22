@@ -1,7 +1,8 @@
 package com.example.globalcompat.audit
 
-import com.example.globalcompat.catalog.BuiltInComponentCatalog
 import com.example.globalcompat.catalog.ComponentArtifact
+import com.example.globalcompat.catalog.ComponentCatalog
+import com.example.globalcompat.catalog.RuntimeTrustedCatalogRepository
 import com.example.globalcompat.validation.DeviceValidationEvidenceInput
 import com.example.globalcompat.validation.DeviceValidationEvidenceReport
 import com.example.globalcompat.validation.DeviceValidationPromotionPolicy
@@ -23,6 +24,8 @@ class DeviceValidationEvidenceTool(
     private val promotionPolicy: DeviceValidationPromotionPolicy =
         DeviceValidationPromotionPolicy(),
     private val gson: Gson = Gson(),
+    private val catalog: ComponentCatalog? =
+        RuntimeTrustedCatalogRepository.instance.currentSnapshot()?.catalog,
 ) {
     fun evaluate(
         baselinePath: Path,
@@ -55,7 +58,8 @@ class DeviceValidationEvidenceTool(
             romFamily = baseline.system.romFamily,
             romVersion = baseline.system.romVersion,
         )
-        val catalogArtifacts = BuiltInComponentCatalog.catalog.releases
+        val trustedCatalog = requireNotNull(catalog) { "No trusted catalog is available" }
+        val catalogArtifacts = trustedCatalog.releases
             .flatMap { it.artifacts }
             .associateBy { it.packageName }
         val componentEvidence = baseline.components.map { component ->
@@ -93,7 +97,7 @@ class DeviceValidationEvidenceTool(
             }
         val blockedRules = componentEvidence.mapNotNull { component ->
             val official = catalogArtifacts[component.packageName] ?: return@mapNotNull null
-            BuiltInComponentCatalog.catalog.blockedVersions.firstOrNull { rule ->
+            trustedCatalog.blockedVersions.firstOrNull { rule ->
                 rule.componentId == official.componentId &&
                     (component.versionCode in rule.versions ||
                         component.versionName in rule.versions ||

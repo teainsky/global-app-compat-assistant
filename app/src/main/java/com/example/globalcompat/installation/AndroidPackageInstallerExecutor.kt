@@ -11,8 +11,8 @@ import android.os.Build
 import android.provider.Settings
 import com.example.globalcompat.baseline.AndroidInstalledPackageLookup
 import com.example.globalcompat.baseline.OfficialComponentMatcher
-import com.example.globalcompat.catalog.BuiltInComponentCatalog
-import com.example.globalcompat.catalog.ComponentCatalog
+import com.example.globalcompat.catalog.CatalogSnapshot
+import com.example.globalcompat.catalog.RuntimeTrustedCatalogRepository
 import com.example.globalcompat.data.DeviceCategory
 import com.example.globalcompat.data.RomFamily
 import com.example.globalcompat.preparation.AndroidDownloadedApkInspector
@@ -237,10 +237,10 @@ class AndroidInstalledComponentPostVerifier(
 
 class AndroidFinalEnvironmentVerifier(
     private val componentVerifier: InstalledComponentPostVerifier,
-    private val catalog: ComponentCatalog = BuiltInComponentCatalog.catalog,
+    private val catalogSnapshot: CatalogSnapshot?,
 ) : FinalEnvironmentVerifier {
     override fun verify(deviceContext: InstallationDeviceContext): Boolean {
-        val artifacts = catalog.releases.singleOrNull()?.artifacts ?: return false
+        val artifacts = catalogSnapshot?.catalog?.releases?.singleOrNull()?.artifacts ?: return false
         return artifacts.isNotEmpty() && artifacts.all { artifact ->
             val expected = ExecutableInstallationArtifact(
                 componentId = artifact.componentId,
@@ -268,6 +268,7 @@ class AndroidFinalEnvironmentVerifier(
 class AndroidInstallationExecutorService(
     private val context: Context,
 ) {
+    private val catalogSnapshot = RuntimeTrustedCatalogRepository.instance.currentSnapshot()
     private val store = SharedPreferencesInstallationSessionStore(context)
     private val gateway = AndroidPackageInstallerGateway(context)
     private val postVerifier = AndroidInstalledComponentPostVerifier(context)
@@ -276,7 +277,7 @@ class AndroidInstallationExecutorService(
         packageInstallerGateway = gateway,
         preparedArtifactRevalidator = AndroidPreparedArtifactRevalidator(context),
         installedComponentVerifier = postVerifier,
-        finalEnvironmentVerifier = AndroidFinalEnvironmentVerifier(postVerifier),
+        finalEnvironmentVerifier = AndroidFinalEnvironmentVerifier(postVerifier, catalogSnapshot),
     )
 
     fun begin(request: InstallationExecutionRequest): InstallationExecutionSnapshot =

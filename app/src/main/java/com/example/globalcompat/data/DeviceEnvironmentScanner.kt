@@ -2,20 +2,24 @@ package com.example.globalcompat.data
 
 import android.content.Context
 import android.os.Build
+import com.example.globalcompat.catalog.CatalogSnapshot
+import com.example.globalcompat.catalog.RuntimeTrustedCatalogRepository
 
 class DeviceEnvironmentScanner(
     context: Context,
+    private val catalogSnapshot: CatalogSnapshot? =
+        RuntimeTrustedCatalogRepository.instance.currentSnapshot(),
     private val propertyReader: SystemPropertyReader = GetPropSystemPropertyReader(),
     private val romIdentifier: RomIdentifier = PropertyBasedRomIdentifier(),
     private val componentScanner: ComponentScanner = AndroidComponentScanner(context.packageManager),
     private val compatibilityLayerDetector: GoogleCompatibilityLayerDetector =
         DeferredGoogleCompatibilityLayerDetector(),
     private val compatibilityPlanMatcher: CompatibilityPlanMatcher =
-        RuleBasedCompatibilityPlanMatcher(),
+        RuleBasedCompatibilityPlanMatcher(catalogSnapshot),
     private val deviceProfileClassifier: GlobalDeviceProfileClassifier =
-        GlobalDeviceProfileClassifier(),
+        GlobalDeviceProfileClassifier(catalogSnapshot = catalogSnapshot),
     private val compatibilityDecisionEngine: GlobalCompatibilityDecisionEngine =
-        GlobalCompatibilityDecisionEngine(),
+        GlobalCompatibilityDecisionEngine(catalogSnapshot),
     private val clock: () -> Long = System::currentTimeMillis,
 ) {
     fun scan(): EnvironmentReport {

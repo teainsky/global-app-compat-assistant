@@ -9,6 +9,7 @@ import com.example.globalcompat.catalog.BuiltInComponentCatalog
 import com.example.globalcompat.catalog.CompatibilityValidationStatus
 import com.example.globalcompat.catalog.InstalledArtifactSignatureStatus
 import com.example.globalcompat.catalog.SourceAvailabilityStatus
+import com.example.globalcompat.catalog.asTestSnapshot
 import com.example.globalcompat.data.AndroidPlatform
 import com.example.globalcompat.data.ApplicableWorkflow
 import com.example.globalcompat.data.CompatibilityLayerAssessment
@@ -445,3 +446,6 @@ class SimulatedInstallationPlannerTest {
             .associate { artifact -> artifact.packageName to requireNotNull(artifact.sha256) }
     }
 }
+
+private fun SimulatedInstallationPlanner(catalog: com.example.globalcompat.catalog.ComponentCatalog) =
+    SimulatedInstallationPlanner(catalog.asTestSnapshot())

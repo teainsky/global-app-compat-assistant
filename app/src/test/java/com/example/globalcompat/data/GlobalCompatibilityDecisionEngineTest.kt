@@ -1,5 +1,6 @@
 package com.example.globalcompat.data
 
+import com.example.globalcompat.catalog.RuntimeTrustedCatalogRepository
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
@@ -25,6 +26,11 @@ class GlobalCompatibilityDecisionEngineTest {
         assertEquals(ApplicableWorkflow.NONE, decision.applicableWorkflow)
         assertEquals(PlayCertification.UNKNOWN, decision.googleEnvironmentAssessment.playCertification)
         assertTrue(decision.warnings.any { it.code == "PLAY_CERTIFICATION_UNKNOWN" })
+        val snapshot = requireNotNull(
+            RuntimeTrustedCatalogRepository.instance.currentSnapshot(),
+        )
+        assertEquals(snapshot.catalogVersion, decision.catalogVersion)
+        assertEquals(snapshot.catalogDigest, decision.catalogDigest)
     }
 
     @Test

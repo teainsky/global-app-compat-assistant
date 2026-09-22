@@ -111,4 +111,6 @@ data class SimulatedInstallationPlan(
     val nextAction: SimulationNextAction,
     val stages: List<SimulationStageResult>,
     val warnings: List<String>,
+    val catalogVersion: Long? = null,
+    val catalogDigest: String? = null,
 )

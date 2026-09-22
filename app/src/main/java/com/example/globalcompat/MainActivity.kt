@@ -197,7 +197,12 @@ private fun ScannerScreen(scanner: DeviceBaselineScanner) {
                                     validationLevel = result.environment.deviceProfile.validationLevel,
                                     compatibilityDecisionStatus =
                                         result.environment.compatibilityDecision.decisionStatus,
+                                    catalogVersion = result.environment.compatibilityDecision
+                                        .catalogVersion,
+                                    catalogDigest = result.environment.compatibilityDecision
+                                        .catalogDigest,
                                 ),
+                                catalogSnapshot = result.catalogSnapshot,
                                 cancellation = cancellation,
                             ) { update ->
                                 scope.launch { preparationProgress = update }
@@ -227,6 +232,7 @@ private fun ScannerScreen(scanner: DeviceBaselineScanner) {
                                     romFamily = result.environment.rom.family.name,
                                     romVersion = result.environment.rom.version,
                                 ),
+                                catalogSnapshot = result.catalogSnapshot,
                             )
                         }
                         artifactAuditReport = report

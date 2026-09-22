@@ -1,14 +1,17 @@
 package com.example.globalcompat.data
 
-import com.example.globalcompat.catalog.BuiltInComponentCatalog
 import com.example.globalcompat.catalog.CatalogVerifiedDeviceCompatibilityRecord
+import com.example.globalcompat.catalog.CatalogSnapshot
 import com.example.globalcompat.catalog.CompatibilityValidationStatus
+import com.example.globalcompat.catalog.RuntimeTrustedCatalogRepository
 
 class GlobalDeviceProfileClassifier(
     private val oemRegistry: OemBrandRegistry = OemBrandRegistry(),
-    private val verifiedDeviceRecords: List<CatalogVerifiedDeviceCompatibilityRecord> =
-        BuiltInComponentCatalog.catalog.verifiedDeviceRecords,
+    private val catalogSnapshot: CatalogSnapshot? =
+        RuntimeTrustedCatalogRepository.instance.currentSnapshot(),
 ) {
+    private val verifiedDeviceRecords: List<CatalogVerifiedDeviceCompatibilityRecord>
+        get() = catalogSnapshot?.catalog?.verifiedDeviceRecords.orEmpty()
     fun classify(
         device: DeviceIdentity,
         android: AndroidPlatform,

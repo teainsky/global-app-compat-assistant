@@ -1,14 +1,15 @@
 package com.example.globalcompat.data
 
-import com.example.globalcompat.catalog.BuiltInComponentCatalog
 import com.example.globalcompat.catalog.CatalogMatchRequest
+import com.example.globalcompat.catalog.CatalogSnapshot
 import com.example.globalcompat.catalog.CatalogSystemFamily
 import com.example.globalcompat.catalog.CompatibilityValidationStatus
-import com.example.globalcompat.catalog.ComponentCatalog
+import com.example.globalcompat.catalog.RuntimeTrustedCatalogRepository
 import com.example.globalcompat.catalog.TrustedComponentCatalogMatcher
 
 class GlobalCompatibilityDecisionEngine(
-    private val catalog: ComponentCatalog = BuiltInComponentCatalog.catalog,
+    private val catalogSnapshot: CatalogSnapshot? =
+        RuntimeTrustedCatalogRepository.instance.currentSnapshot(),
     private val catalogMatcher: TrustedComponentCatalogMatcher = TrustedComponentCatalogMatcher(),
 ) {
     fun decide(profile: DeviceProfile): CompatibilityDecision {
@@ -60,6 +61,37 @@ class GlobalCompatibilityDecisionEngine(
                     ),
                 ),
                 nextAction = CompatibilityNextAction.STOP_KNOWN_BLOCK,
+            )
+        }
+
+        if (catalogSnapshot == null) {
+            return decision(
+                profile = profile,
+                status = if (
+                    profile.googleEnvironmentAssessment.componentSetState ==
+                    GoogleComponentSetState.UNKNOWN
+                ) {
+                    CompatibilityDecisionStatus.UNKNOWN
+                } else {
+                    CompatibilityDecisionStatus.DIAGNOSTIC_ONLY
+                },
+                workflow = ApplicableWorkflow.NONE,
+                confidence = DetectionConfidence.LOW,
+                evidence = baseEvidence,
+                warnings = listOf(
+                    message(
+                        "TRUSTED_CATALOG_UNAVAILABLE",
+                        "当前没有可信 catalog，仅允许基础诊断，不能解锁安装。",
+                    ),
+                ),
+                nextAction = if (
+                    profile.googleEnvironmentAssessment.componentSetState ==
+                    GoogleComponentSetState.UNKNOWN
+                ) {
+                    CompatibilityNextAction.COLLECT_MORE_EVIDENCE
+                } else {
+                    CompatibilityNextAction.RUN_DIAGNOSTICS
+                },
             )
         }
 
@@ -144,6 +176,7 @@ class GlobalCompatibilityDecisionEngine(
     }
 
     private fun verifiedWorkflow(profile: DeviceProfile): ApplicableWorkflow? {
+        val catalog = catalogSnapshot?.catalog ?: return null
         if (profile.platformFamily != PlatformFamily.HARMONY_ANDROID_COMPAT ||
             profile.romFamily != RomFamily.HARMONY_OS
         ) {
@@ -188,6 +221,8 @@ class GlobalCompatibilityDecisionEngine(
         blockers = blockers,
         warnings = warnings,
         nextAction = nextAction,
+        catalogVersion = catalogSnapshot?.catalogVersion,
+        catalogDigest = catalogSnapshot?.catalogDigest,
     )
 
     private fun diagnosticConfidence(level: GlobalValidationLevel) = when (level) {

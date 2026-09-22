@@ -43,6 +43,26 @@ class InstallationExecutor(
                 "准备文件尚未取得安装资格",
             )
         }
+        val catalogVersion = request.sessionPlan.catalogVersion
+        val catalogDigest = request.sessionPlan.catalogDigest
+        if (catalogVersion == null || catalogDigest.isNullOrBlank() ||
+            request.preparationResult.catalogVersion != catalogVersion ||
+            request.preparationResult.catalogDigest != catalogDigest ||
+            request.sessionPlan.steps.any { step ->
+                step.downloadRequest?.let { download ->
+                    download.catalogVersion != catalogVersion ||
+                        download.catalogDigest != catalogDigest
+                } == true
+            }
+        ) {
+            return blocked(
+                request.deviceContext,
+                InstallationExecutionFailure.CATALOG_SNAPSHOT_MISMATCH,
+                "安装计划与准备文件使用的规则版本不一致",
+                catalogVersion,
+                catalogDigest,
+            )
+        }
 
         val artifacts = buildArtifacts(request)
             ?: return blocked(
@@ -92,6 +112,8 @@ class InstallationExecutor(
                     "请先允许此应用请求系统安装确认"
                 },
                 updatedAtEpochMillis = clock(),
+                catalogVersion = catalogVersion,
+                catalogDigest = catalogDigest,
             ),
         )
     }
@@ -419,6 +441,8 @@ class InstallationExecutor(
         context: InstallationDeviceContext,
         failure: InstallationExecutionFailure,
         message: String,
+        catalogVersion: Long? = null,
+        catalogDigest: String? = null,
     ): InstallationExecutionSnapshot = save(
         InstallationExecutionSnapshot(
             schemaVersion = SCHEMA_VERSION,
@@ -432,6 +456,8 @@ class InstallationExecutor(
             failure = failure,
             userMessage = message,
             updatedAtEpochMillis = clock(),
+            catalogVersion = catalogVersion,
+            catalogDigest = catalogDigest,
         ),
     )
 

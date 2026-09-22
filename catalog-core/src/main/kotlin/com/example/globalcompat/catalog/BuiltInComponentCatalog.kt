@@ -21,6 +21,8 @@ object BuiltInComponentCatalog {
         parsed
     }
 
+    internal fun catalogJsonBytes(): ByteArray = resourceBytes(CATALOG_RESOURCE_PATH)
+
     private fun resourceBytes(path: String): ByteArray = checkNotNull(
         BuiltInComponentCatalog::class.java.getResourceAsStream(path),
     ) { "Built-in compatibility catalog resource is missing: $path" }.use { it.readBytes() }

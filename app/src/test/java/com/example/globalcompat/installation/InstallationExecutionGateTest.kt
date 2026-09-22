@@ -5,6 +5,7 @@ import com.example.globalcompat.catalog.BuiltInComponentCatalog
 import com.example.globalcompat.catalog.CompatibilityValidationStatus
 import com.example.globalcompat.catalog.ComponentCatalog
 import com.example.globalcompat.catalog.SourceAvailabilityStatus
+import com.example.globalcompat.catalog.asTestSnapshot
 import com.example.globalcompat.data.CompatibilityPlanId
 import com.example.globalcompat.data.CompatibilityDecisionStatus
 import com.example.globalcompat.data.DeviceCategory
@@ -82,6 +83,27 @@ class InstallationExecutionGateTest {
         assertTrue(result.steps.all {
             it.state == InstallationStepState.READY_FOR_USER_CONFIRMATION
         })
+        assertEquals(plan.catalogVersion, result.catalogVersion)
+        assertEquals(plan.catalogDigest, result.catalogDigest)
+        assertTrue(result.steps.all { step ->
+            step.downloadRequest?.catalogVersion == plan.catalogVersion &&
+                step.downloadRequest?.catalogDigest == plan.catalogDigest
+        })
+    }
+
+    @Test
+    fun `no trusted catalog fails closed before installation evaluation`() {
+        val plan = simulatedPlan(
+            catalog = builtIn,
+            states = mapOf(
+                GMS_COMPONENT_ID to CurrentComponentState.NOT_INSTALLED,
+                VENDING_COMPONENT_ID to CurrentComponentState.NOT_INSTALLED,
+            ),
+        )
+
+        val result = InstallationExecutionGate(null).evaluate(plan)
+
+        assertBlocked(result, InstallationBlockReason.TRUSTED_CATALOG_UNAVAILABLE)
     }
 
     @Test
@@ -478,6 +500,8 @@ class InstallationExecutionGateTest {
             },
             stages = emptyList(),
             warnings = emptyList(),
+            catalogVersion = catalog.catalogVersion,
+            catalogDigest = catalog.asTestSnapshot().catalogDigest,
         )
     }
 
@@ -522,3 +546,6 @@ class InstallationExecutionGateTest {
         val COMPONENT_ORDER = listOf(GMS_COMPONENT_ID, VENDING_COMPONENT_ID)
     }
 }
+
+internal fun InstallationExecutionGate(catalog: ComponentCatalog) =
+    InstallationExecutionGate(catalog.asTestSnapshot())
