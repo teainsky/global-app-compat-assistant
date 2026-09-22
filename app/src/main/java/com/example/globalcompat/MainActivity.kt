@@ -58,6 +58,8 @@ import com.example.globalcompat.catalog.InstalledArtifactSignatureStatus
 import com.example.globalcompat.data.ComponentPresence
 import com.example.globalcompat.data.CompatibilityPlan
 import com.example.globalcompat.data.CompatibilityPlanId
+import com.example.globalcompat.data.CompatibilityDecision
+import com.example.globalcompat.data.CompatibilityDecisionStatus
 import com.example.globalcompat.data.SystemComponent
 import com.example.globalcompat.installation.InstallationBlockReason
 import com.example.globalcompat.installation.InstallationSessionPlan
@@ -193,6 +195,8 @@ private fun ScannerScreen(scanner: DeviceBaselineScanner) {
                                     systemVersion = result.environment.rom.version,
                                     androidApiLevel = result.environment.android.apiLevel,
                                     validationLevel = result.environment.deviceProfile.validationLevel,
+                                    compatibilityDecisionStatus =
+                                        result.environment.compatibilityDecision.decisionStatus,
                                 ),
                                 cancellation = cancellation,
                             ) { update ->
@@ -379,6 +383,9 @@ private fun EnvironmentReportView(
                     style = MaterialTheme.typography.bodySmall,
                 )
             }
+        }
+        item {
+            CompatibilityDecisionCard(report.compatibilityDecision)
         }
         item {
             CompatibilityPlanCard(report.compatibilityPlan)
@@ -640,13 +647,64 @@ private fun Long.userFileSize(): String = when {
 }
 
 @Composable
+private fun CompatibilityDecisionCard(decision: CompatibilityDecision) {
+    var showTechnicalEvidence by remember(decision) { mutableStateOf(false) }
+    val userMessage = when (decision.decisionStatus) {
+        CompatibilityDecisionStatus.NO_ACTION_REQUIRED -> "Google 运行环境正常，无需处理"
+        CompatibilityDecisionStatus.VERIFIED_WORKFLOW_AVAILABLE -> "已有可信方案，可以准备环境"
+        CompatibilityDecisionStatus.DIAGNOSTIC_ONLY -> "检测到环境问题，当前仅提供诊断"
+        CompatibilityDecisionStatus.CURRENT_WORKFLOW_NOT_APPLICABLE ->
+            "当前工作流不适用于此系统"
+        CompatibilityDecisionStatus.UNKNOWN -> "证据不足，暂时无法安全判断"
+        CompatibilityDecisionStatus.BLOCKED_BY_KNOWN_RULE -> "可信规则已阻止当前流程"
+    }
+
+    ReportSection("全球兼容决策") {
+        Text(
+            text = userMessage,
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.SemiBold,
+        )
+        ReportRow("下一步", decision.nextAction.name)
+        TextButton(onClick = { showTechnicalEvidence = !showTechnicalEvidence }) {
+            Text(if (showTechnicalEvidence) "收起技术证据" else "查看技术证据")
+        }
+        if (showTechnicalEvidence) {
+            ReportRow("决策", decision.decisionStatus.name)
+            ReportRow("验证等级", decision.validationLevel.name)
+            ReportRow("Google 环境", decision.googleEnvironment.name)
+            ReportRow("适用工作流", decision.applicableWorkflow.name)
+            ReportRow("置信度", decision.confidence.name)
+            decision.evidence.forEach { evidence ->
+                Text(
+                    "• ${evidence.code}：${evidence.observedValue}",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+            (decision.blockers + decision.warnings).forEach { message ->
+                Text(
+                    "• ${message.code}：${message.message}",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+        }
+    }
+}
+
+@Composable
 private fun CompatibilityPlanCard(plan: CompatibilityPlan) {
     var showTechnicalEvidence by remember(plan) { mutableStateOf(false) }
     val userMessage = when (plan.planId) {
         CompatibilityPlanId.NO_ACTION_REQUIRED -> "Google 环境已完整，无需处理"
         CompatibilityPlanId.HUAWEI_MICROG_COMPAT_PLAN -> "当前设备需要配置兼容环境"
         CompatibilityPlanId.GMS_REPAIR_REQUIRED -> "Google 环境不完整，需要修复"
-        CompatibilityPlanId.UNSUPPORTED_OR_UNKNOWN -> "当前系统暂未支持"
+        CompatibilityPlanId.UNSUPPORTED_OR_UNKNOWN -> if (
+            plan.status == com.example.globalcompat.data.CompatibilityPlanStatus.UNDETERMINED
+        ) {
+            "证据不足，需要进一步诊断"
+        } else {
+            "当前工作流不适用于此系统"
+        }
     }
 
     ReportSection("推荐环境方案") {
@@ -703,6 +761,8 @@ private fun InstallationExecutionGateCard(plan: InstallationSessionPlan) {
             "官方组件不可取得，暂不可安装"
         InstallationBlockReason.COMPATIBILITY_NOT_DEVICE_VERIFIED in plan.blockReasons ->
             "当前方案尚未完成设备验证，暂不可安装"
+        InstallationBlockReason.DECISION_NOT_VERIFIED_WORKFLOW in plan.blockReasons ->
+            "当前没有已验证可执行方案，暂不可安装"
         plan.status == InstallationSessionStatus.READY_FOR_USER_CONFIRMATION ->
             "安装接口尚未启用"
         else -> "安全门禁未通过，暂不可安装"

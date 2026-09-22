@@ -1,6 +1,7 @@
 package com.example.globalcompat.preparation
 
 import com.example.globalcompat.data.CompatibilityPlanId
+import com.example.globalcompat.data.CompatibilityDecisionStatus
 import com.example.globalcompat.data.DeviceCategory
 import com.example.globalcompat.data.GlobalValidationLevel
 import java.io.File
@@ -44,6 +45,7 @@ data class EnvironmentPreparationRequest(
     val systemVersion: String?,
     val androidApiLevel: Int,
     val validationLevel: GlobalValidationLevel,
+    val compatibilityDecisionStatus: CompatibilityDecisionStatus,
 )
 
 data class EnvironmentPreparationProgress(

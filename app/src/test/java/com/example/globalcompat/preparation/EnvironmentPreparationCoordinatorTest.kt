@@ -5,6 +5,7 @@ import com.example.globalcompat.catalog.CatalogRuntimeState
 import com.example.globalcompat.catalog.CatalogUpdateStatus
 import com.example.globalcompat.catalog.ComponentCatalog
 import com.example.globalcompat.data.CompatibilityPlanId
+import com.example.globalcompat.data.CompatibilityDecisionStatus
 import com.example.globalcompat.data.DeviceCategory
 import com.example.globalcompat.data.GlobalValidationLevel
 import org.junit.Assert.assertEquals
@@ -184,6 +185,20 @@ class EnvironmentPreparationCoordinatorTest {
         }
     }
 
+    @Test
+    fun `device verified without verified workflow decision stays install locked`() {
+        val fixture = fixture()
+
+        val result = fixture.coordinator.prepare(
+            EXACT_VERIFIED_REQUEST.copy(
+                compatibilityDecisionStatus = CompatibilityDecisionStatus.DIAGNOSTIC_ONLY,
+            ),
+        )
+
+        assertEquals(EnvironmentPreparationStatus.DOWNLOAD_VERIFIED_READY, result.status)
+        assertFalse(result.installationAllowed)
+    }
+
     private fun fixture(
         mode: DownloadMode = DownloadMode.NORMAL,
         catalogStatus: CatalogUpdateStatus = CatalogUpdateStatus.REMOTE_VERIFIED,
@@ -310,11 +325,14 @@ class EnvironmentPreparationCoordinatorTest {
             systemVersion = "4.2",
             androidApiLevel = 31,
             validationLevel = GlobalValidationLevel.PROBABLE,
+            compatibilityDecisionStatus = CompatibilityDecisionStatus.DIAGNOSTIC_ONLY,
         )
         val EXACT_VERIFIED_REQUEST = HARMONY_42_REQUEST.copy(
             deviceModel = "HBN-AL80",
             systemVersion = "4.2.0",
             validationLevel = GlobalValidationLevel.DEVICE_VERIFIED,
+            compatibilityDecisionStatus =
+                CompatibilityDecisionStatus.VERIFIED_WORKFLOW_AVAILABLE,
         )
     }
 }

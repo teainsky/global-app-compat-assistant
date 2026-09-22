@@ -105,5 +105,6 @@ data class EnvironmentReport(
     val components: List<SystemComponent>,
     val googleCompatibilityLayer: GoogleCompatibilityLayerStatus,
     val deviceProfile: DeviceProfile,
+    val compatibilityDecision: CompatibilityDecision,
     val compatibilityPlan: CompatibilityPlan,
 )

@@ -6,6 +6,7 @@ import com.example.globalcompat.catalog.CompatibilityValidationStatus
 import com.example.globalcompat.catalog.ComponentCatalog
 import com.example.globalcompat.catalog.SourceAvailabilityStatus
 import com.example.globalcompat.data.CompatibilityPlanId
+import com.example.globalcompat.data.CompatibilityDecisionStatus
 import com.example.globalcompat.data.DeviceCategory
 import com.example.globalcompat.data.GlobalValidationLevel
 import com.example.globalcompat.simulation.CurrentComponentDecision
@@ -159,6 +160,26 @@ class InstallationExecutionGateTest {
 
             assertBlocked(result, InstallationBlockReason.COMPATIBILITY_NOT_DEVICE_VERIFIED)
         }
+    }
+
+    @Test
+    fun `device verified without verified workflow decision cannot unlock installation`() {
+        val catalog = deviceVerifiedCatalog()
+        val plan = simulatedPlan(
+            catalog = catalog,
+            states = mapOf(
+                GMS_COMPONENT_ID to CurrentComponentState.NOT_INSTALLED,
+                VENDING_COMPONENT_ID to CurrentComponentState.NOT_INSTALLED,
+            ),
+            decisionStatus = CompatibilityDecisionStatus.DIAGNOSTIC_ONLY,
+        )
+
+        val result = InstallationExecutionGate(catalog).evaluate(
+            plan,
+            verificationResults(catalog, GMS_COMPONENT_ID, VENDING_COMPONENT_ID),
+        )
+
+        assertBlocked(result, InstallationBlockReason.DECISION_NOT_VERIFIED_WORKFLOW)
     }
 
     @Test
@@ -371,6 +392,8 @@ class InstallationExecutionGateTest {
         category: DeviceCategory = DeviceCategory.HUAWEI_HARMONY_ANDROID_COMPAT,
         planId: CompatibilityPlanId = CompatibilityPlanId.HUAWEI_MICROG_COMPAT_PLAN,
         validationLevel: GlobalValidationLevel = GlobalValidationLevel.DEVICE_VERIFIED,
+        decisionStatus: CompatibilityDecisionStatus =
+            CompatibilityDecisionStatus.VERIFIED_WORKFLOW_AVAILABLE,
     ): SimulatedInstallationPlan {
         val release = catalog.releases.single()
         val selectedArtifacts = if (category == DeviceCategory.HARMONYOS_5_PLUS) {
@@ -441,6 +464,7 @@ class InstallationExecutionGateTest {
             systemVersion = if (category == DeviceCategory.HARMONYOS_5_PLUS) "5.0" else "4.2",
             androidApiLevel = 31,
             validationLevel = validationLevel,
+            compatibilityDecisionStatus = decisionStatus,
             selectedReleaseTag = release.releaseTag,
             selectedArtifacts = selectedArtifacts,
             currentComponents = currentComponents,

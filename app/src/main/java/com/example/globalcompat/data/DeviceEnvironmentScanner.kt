@@ -14,6 +14,8 @@ class DeviceEnvironmentScanner(
         RuleBasedCompatibilityPlanMatcher(),
     private val deviceProfileClassifier: GlobalDeviceProfileClassifier =
         GlobalDeviceProfileClassifier(),
+    private val compatibilityDecisionEngine: GlobalCompatibilityDecisionEngine =
+        GlobalCompatibilityDecisionEngine(),
     private val clock: () -> Long = System::currentTimeMillis,
 ) {
     fun scan(): EnvironmentReport {
@@ -51,6 +53,7 @@ class DeviceEnvironmentScanner(
             rom = rom,
             components = components,
         )
+        val compatibilityDecision = compatibilityDecisionEngine.decide(deviceProfile)
         val compatibilityPlan = compatibilityPlanMatcher.match(
             CompatibilityContext(
                 device = device,
@@ -62,7 +65,7 @@ class DeviceEnvironmentScanner(
         )
 
         return EnvironmentReport(
-            schemaVersion = 3,
+            schemaVersion = 4,
             scannedAtEpochMillis = clock(),
             device = device,
             android = android,
@@ -70,6 +73,7 @@ class DeviceEnvironmentScanner(
             components = components,
             googleCompatibilityLayer = googleCompatibilityLayer,
             deviceProfile = deviceProfile,
+            compatibilityDecision = compatibilityDecision,
             compatibilityPlan = compatibilityPlan,
         )
     }

@@ -154,7 +154,7 @@ class GlobalDeviceProfileClassifierTest {
 
         assertEquals(PlatformFamily.HARMONY_ANDROID_COMPAT, harmony4.platformFamily)
         assertEquals(PlatformFamily.HARMONY_NATIVE, harmony5.platformFamily)
-        assertEquals(GlobalValidationLevel.BLOCKED, harmony5.validationLevel)
+        assertEquals(GlobalValidationLevel.PROBABLE, harmony5.validationLevel)
         assertEquals(InstallationCapability.NOT_APPLICABLE, harmony5.installationCapability)
     }
 

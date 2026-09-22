@@ -414,6 +414,7 @@ class SimulatedInstallationPlanner(
         systemVersion = environment.rom.version.orEmpty(),
         androidApiLevel = environment.android.apiLevel,
         validationLevel = environment.deviceProfile.validationLevel,
+        compatibilityDecisionStatus = environment.compatibilityDecision.decisionStatus,
         selectedReleaseTag = release?.releaseTag,
         selectedArtifacts = selectedArtifacts,
         currentComponents = currentComponents,

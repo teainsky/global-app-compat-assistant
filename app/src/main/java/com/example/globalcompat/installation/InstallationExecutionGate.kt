@@ -10,6 +10,7 @@ import com.example.globalcompat.catalog.ComponentCatalog
 import com.example.globalcompat.catalog.ComponentRelease
 import com.example.globalcompat.catalog.TrustedComponentCatalogMatcher
 import com.example.globalcompat.data.CompatibilityPlanId
+import com.example.globalcompat.data.CompatibilityDecisionStatus
 import com.example.globalcompat.data.DeviceCategory
 import com.example.globalcompat.data.GlobalValidationLevel
 import com.example.globalcompat.simulation.CurrentComponentState
@@ -67,6 +68,14 @@ class InstallationExecutionGate(
             return blockedPlan(
                 simulatedPlan = simulatedPlan,
                 reasons = listOf(InstallationBlockReason.COMPATIBILITY_NOT_DEVICE_VERIFIED),
+            )
+        }
+        if (simulatedPlan.compatibilityDecisionStatus !=
+            CompatibilityDecisionStatus.VERIFIED_WORKFLOW_AVAILABLE
+        ) {
+            return blockedPlan(
+                simulatedPlan = simulatedPlan,
+                reasons = listOf(InstallationBlockReason.DECISION_NOT_VERIFIED_WORKFLOW),
             )
         }
 
@@ -432,6 +441,8 @@ class InstallationExecutionGate(
             "检测到版本冲突，暂不可执行替换"
         InstallationBlockReason.COMPATIBILITY_NOT_DEVICE_VERIFIED in reasons ->
             "当前方案尚未完成设备验证，暂不可安装"
+        InstallationBlockReason.DECISION_NOT_VERIFIED_WORKFLOW in reasons ->
+            "当前没有已验证可执行方案，暂不可安装"
         InstallationBlockReason.DOWNLOAD_EVIDENCE_MISSING in reasons ->
             "缺少下载与本地校验证据，暂不可安装"
         else -> "安装前置证据不足，已安全停止"

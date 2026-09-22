@@ -14,6 +14,7 @@ import com.example.globalcompat.catalog.ComponentVariant
 import com.example.globalcompat.catalog.SourceAvailabilityStatus
 import com.example.globalcompat.catalog.TrustedComponentCatalogMatcher
 import com.example.globalcompat.data.CompatibilityPlanId
+import com.example.globalcompat.data.CompatibilityDecisionStatus
 import com.example.globalcompat.data.DeviceCategory
 import com.example.globalcompat.data.GlobalValidationLevel
 import java.io.File
@@ -293,6 +294,8 @@ class EnvironmentPreparationCoordinator(
         }
         val installationAllowed =
             request.validationLevel == GlobalValidationLevel.DEVICE_VERIFIED &&
+                request.compatibilityDecisionStatus ==
+                CompatibilityDecisionStatus.VERIFIED_WORKFLOW_AVAILABLE &&
                 release.compatibilityStatus == CompatibilityValidationStatus.DEVICE_VERIFIED &&
                 selected.all {
                     it.artifact.compatibilityStatus ==

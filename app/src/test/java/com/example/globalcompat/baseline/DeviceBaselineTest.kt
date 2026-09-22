@@ -10,6 +10,10 @@ import com.example.globalcompat.data.AndroidPlatform
 import com.example.globalcompat.data.CompatibilityPlan
 import com.example.globalcompat.data.CompatibilityPlanId
 import com.example.globalcompat.data.CompatibilityPlanStatus
+import com.example.globalcompat.data.ApplicableWorkflow
+import com.example.globalcompat.data.CompatibilityDecision
+import com.example.globalcompat.data.CompatibilityDecisionStatus
+import com.example.globalcompat.data.CompatibilityNextAction
 import com.example.globalcompat.data.CompatibilityLayerAssessment
 import com.example.globalcompat.data.DetectionConfidence
 import com.example.globalcompat.data.DeviceCategory
@@ -454,6 +458,17 @@ class DeviceBaselineTest {
             installationCapability = InstallationCapability.LEGACY_HARMONY_COMPATIBLE,
             validationLevel = GlobalValidationLevel.PROBABLE,
             evidence = emptyList(),
+        ),
+        compatibilityDecision = CompatibilityDecision(
+            decisionStatus = CompatibilityDecisionStatus.UNKNOWN,
+            validationLevel = GlobalValidationLevel.PROBABLE,
+            googleEnvironment = GoogleEnvironment.UNKNOWN,
+            applicableWorkflow = ApplicableWorkflow.NONE,
+            confidence = DetectionConfidence.UNKNOWN,
+            evidence = emptyList(),
+            blockers = emptyList(),
+            warnings = emptyList(),
+            nextAction = CompatibilityNextAction.COLLECT_MORE_EVIDENCE,
         ),
         compatibilityPlan = CompatibilityPlan(
             deviceCategory = DeviceCategory.HUAWEI_HARMONY_ANDROID_COMPAT,

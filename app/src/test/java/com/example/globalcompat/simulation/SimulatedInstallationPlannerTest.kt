@@ -10,7 +10,11 @@ import com.example.globalcompat.catalog.CompatibilityValidationStatus
 import com.example.globalcompat.catalog.InstalledArtifactSignatureStatus
 import com.example.globalcompat.catalog.SourceAvailabilityStatus
 import com.example.globalcompat.data.AndroidPlatform
+import com.example.globalcompat.data.ApplicableWorkflow
 import com.example.globalcompat.data.CompatibilityLayerAssessment
+import com.example.globalcompat.data.CompatibilityDecision
+import com.example.globalcompat.data.CompatibilityDecisionStatus
+import com.example.globalcompat.data.CompatibilityNextAction
 import com.example.globalcompat.data.CompatibilityPlan
 import com.example.globalcompat.data.CompatibilityPlanId
 import com.example.globalcompat.data.CompatibilityPlanStatus
@@ -365,11 +369,40 @@ class SimulatedInstallationPlannerTest {
             validationLevel = if (model == "HBN-AL80" && romVersion == "4.2.0") {
                 GlobalValidationLevel.DEVICE_VERIFIED
             } else if (romFamily == RomFamily.HARMONY_OS_5_PLUS) {
-                GlobalValidationLevel.BLOCKED
+                GlobalValidationLevel.PROBABLE
             } else {
                 GlobalValidationLevel.PROBABLE
             },
             evidence = emptyList(),
+        ),
+        compatibilityDecision = CompatibilityDecision(
+            decisionStatus = when {
+                romFamily == RomFamily.HARMONY_OS_5_PLUS ->
+                    CompatibilityDecisionStatus.CURRENT_WORKFLOW_NOT_APPLICABLE
+                model == "HBN-AL80" && romVersion == "4.2.0" ->
+                    CompatibilityDecisionStatus.VERIFIED_WORKFLOW_AVAILABLE
+                else -> CompatibilityDecisionStatus.DIAGNOSTIC_ONLY
+            },
+            validationLevel = if (model == "HBN-AL80" && romVersion == "4.2.0") {
+                GlobalValidationLevel.DEVICE_VERIFIED
+            } else {
+                GlobalValidationLevel.PROBABLE
+            },
+            googleEnvironment = GoogleEnvironment.GMS_ABSENT,
+            applicableWorkflow = if (model == "HBN-AL80" && romVersion == "4.2.0") {
+                ApplicableWorkflow.HUAWEI_MICROG_COMPAT
+            } else {
+                ApplicableWorkflow.NONE
+            },
+            confidence = DetectionConfidence.HIGH,
+            evidence = emptyList(),
+            blockers = emptyList(),
+            warnings = emptyList(),
+            nextAction = if (model == "HBN-AL80" && romVersion == "4.2.0") {
+                CompatibilityNextAction.PREPARE_VERIFIED_WORKFLOW
+            } else {
+                CompatibilityNextAction.RUN_DIAGNOSTICS
+            },
         ),
         compatibilityPlan = CompatibilityPlan(
             deviceCategory = category,

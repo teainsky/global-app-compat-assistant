@@ -118,7 +118,6 @@ class GlobalDeviceProfileClassifier(
         oemKnown: Boolean,
         trustedEnvironmentVerified: Boolean,
     ): GlobalValidationLevel {
-        if (platformFamily == PlatformFamily.HARMONY_NATIVE) return GlobalValidationLevel.BLOCKED
         val exactRecord = verifiedDeviceRecords.any { record ->
             record.deviceModel == device.model &&
                 record.deviceFamily == device.model &&
