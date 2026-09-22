@@ -11,6 +11,7 @@ import com.example.globalcompat.catalog.ComponentRelease
 import com.example.globalcompat.catalog.TrustedComponentCatalogMatcher
 import com.example.globalcompat.data.CompatibilityPlanId
 import com.example.globalcompat.data.DeviceCategory
+import com.example.globalcompat.data.GlobalValidationLevel
 import com.example.globalcompat.simulation.CurrentComponentState
 import com.example.globalcompat.simulation.SimulatedArtifact
 import com.example.globalcompat.simulation.SimulatedInstallationPlan
@@ -60,6 +61,12 @@ class InstallationExecutionGate(
                     completedStep(artifact)
                 },
                 blockReasons = emptyList(),
+            )
+        }
+        if (simulatedPlan.validationLevel != GlobalValidationLevel.DEVICE_VERIFIED) {
+            return blockedPlan(
+                simulatedPlan = simulatedPlan,
+                reasons = listOf(InstallationBlockReason.COMPATIBILITY_NOT_DEVICE_VERIFIED),
             )
         }
 

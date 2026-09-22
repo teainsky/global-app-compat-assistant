@@ -7,6 +7,7 @@ import com.example.globalcompat.catalog.ComponentCatalog
 import com.example.globalcompat.catalog.SourceAvailabilityStatus
 import com.example.globalcompat.data.CompatibilityPlanId
 import com.example.globalcompat.data.DeviceCategory
+import com.example.globalcompat.data.GlobalValidationLevel
 import com.example.globalcompat.simulation.CurrentComponentDecision
 import com.example.globalcompat.simulation.CurrentComponentState
 import com.example.globalcompat.simulation.SimulatedArtifact
@@ -133,6 +134,31 @@ class InstallationExecutionGateTest {
 
         assertBlocked(result, InstallationBlockReason.COMPATIBILITY_NOT_DEVICE_VERIFIED)
         assertEquals("当前方案尚未完成设备验证，暂不可安装", result.userMessage)
+    }
+
+    @Test
+    fun `probable and environment verified levels cannot unlock installation`() {
+        val catalog = deviceVerifiedCatalog()
+
+        listOf(
+            GlobalValidationLevel.PROBABLE,
+            GlobalValidationLevel.ENVIRONMENT_VERIFIED,
+        ).forEach { validationLevel ->
+            val plan = simulatedPlan(
+                catalog = catalog,
+                states = mapOf(
+                    GMS_COMPONENT_ID to CurrentComponentState.NOT_INSTALLED,
+                    VENDING_COMPONENT_ID to CurrentComponentState.NOT_INSTALLED,
+                ),
+                validationLevel = validationLevel,
+            )
+            val result = InstallationExecutionGate(catalog).evaluate(
+                plan,
+                verificationResults(catalog, GMS_COMPONENT_ID, VENDING_COMPONENT_ID),
+            )
+
+            assertBlocked(result, InstallationBlockReason.COMPATIBILITY_NOT_DEVICE_VERIFIED)
+        }
     }
 
     @Test
@@ -344,6 +370,7 @@ class InstallationExecutionGateTest {
         states: Map<String, CurrentComponentState>,
         category: DeviceCategory = DeviceCategory.HUAWEI_HARMONY_ANDROID_COMPAT,
         planId: CompatibilityPlanId = CompatibilityPlanId.HUAWEI_MICROG_COMPAT_PLAN,
+        validationLevel: GlobalValidationLevel = GlobalValidationLevel.DEVICE_VERIFIED,
     ): SimulatedInstallationPlan {
         val release = catalog.releases.single()
         val selectedArtifacts = if (category == DeviceCategory.HARMONYOS_5_PLUS) {
@@ -413,6 +440,7 @@ class InstallationExecutionGateTest {
             deviceModel = "test-device",
             systemVersion = if (category == DeviceCategory.HARMONYOS_5_PLUS) "5.0" else "4.2",
             androidApiLevel = 31,
+            validationLevel = validationLevel,
             selectedReleaseTag = release.releaseTag,
             selectedArtifacts = selectedArtifacts,
             currentComponents = currentComponents,

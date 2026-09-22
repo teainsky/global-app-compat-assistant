@@ -2,6 +2,7 @@ package com.example.globalcompat.preparation
 
 import com.example.globalcompat.data.CompatibilityPlanId
 import com.example.globalcompat.data.DeviceCategory
+import com.example.globalcompat.data.GlobalValidationLevel
 import java.io.File
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -42,6 +43,7 @@ data class EnvironmentPreparationRequest(
     val deviceModel: String,
     val systemVersion: String?,
     val androidApiLevel: Int,
+    val validationLevel: GlobalValidationLevel,
 )
 
 data class EnvironmentPreparationProgress(

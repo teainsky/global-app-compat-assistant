@@ -27,6 +27,19 @@ class RuleBasedCompatibilityPlanMatcher(
             )
             add(
                 PlanEvidence(
+                    code = "GLOBAL_DEVICE_PROFILE",
+                    source = "deviceProfile",
+                    observedValue = listOf(
+                        context.deviceProfile.platformFamily,
+                        context.deviceProfile.marketVariant,
+                        context.deviceProfile.googleEnvironment,
+                        context.deviceProfile.validationLevel,
+                    ).joinToString(" / "),
+                    description = "平台、市场版本、Google 环境与验证等级",
+                ),
+            )
+            add(
+                PlanEvidence(
                     code = "ROM_IDENTIFICATION",
                     source = "rom.family",
                     observedValue = listOfNotNull(
@@ -41,7 +54,9 @@ class RuleBasedCompatibilityPlanMatcher(
 
         val matchedDeviceRule = matchingDeviceRule(context)
 
-        if (matchedDeviceRule?.deviceCategory == DeviceCategory.HARMONYOS_5_PLUS) {
+        if (context.deviceProfile.platformFamily == PlatformFamily.HARMONY_NATIVE ||
+            matchedDeviceRule?.deviceCategory == DeviceCategory.HARMONYOS_5_PLUS
+        ) {
             return plan(
                 category = DeviceCategory.HARMONYOS_5_PLUS,
                 planId = CompatibilityPlanId.UNSUPPORTED_OR_UNKNOWN,
@@ -78,7 +93,9 @@ class RuleBasedCompatibilityPlanMatcher(
         val hasPlayServices = playServices.isUsable()
         val hasPlayStore = playStore.isUsable()
 
-        if (matchedDeviceRule?.deviceCategory == DeviceCategory.HUAWEI_HARMONY_ANDROID_COMPAT) {
+        if (context.deviceProfile.platformFamily == PlatformFamily.HARMONY_ANDROID_COMPAT &&
+            matchedDeviceRule?.deviceCategory == DeviceCategory.HUAWEI_HARMONY_ANDROID_COMPAT
+        ) {
             val partialWarning = if (hasPlayServices || hasPlayStore) {
                 listOf(
                     warning(
@@ -110,7 +127,7 @@ class RuleBasedCompatibilityPlanMatcher(
             )
         }
 
-        if (hasPlayServices && hasPlayStore) {
+        if (context.deviceProfile.googleEnvironment == GoogleEnvironment.GMS_COMPLETE) {
             return plan(
                 category = DeviceCategory.STANDARD_GMS,
                 planId = CompatibilityPlanId.NO_ACTION_REQUIRED,
@@ -126,7 +143,7 @@ class RuleBasedCompatibilityPlanMatcher(
             )
         }
 
-        if (hasPlayServices || hasPlayStore || playServices.isPresentButDisabled() || playStore.isPresentButDisabled()) {
+        if (context.deviceProfile.googleEnvironment == GoogleEnvironment.GMS_PARTIAL) {
             val missingComponents = missingGoogleComponents(playServices, playStore)
             return plan(
                 category = DeviceCategory.PARTIAL_GMS,
@@ -145,7 +162,10 @@ class RuleBasedCompatibilityPlanMatcher(
             )
         }
 
-        if (matchedDeviceRule?.deviceCategory == DeviceCategory.CHINA_ANDROID_NO_GMS) {
+        if (context.deviceProfile.googleEnvironment == GoogleEnvironment.GMS_ABSENT &&
+            context.deviceProfile.marketVariant == MarketVariant.CHINA_MAINLAND &&
+            matchedDeviceRule?.deviceCategory == DeviceCategory.CHINA_ANDROID_NO_GMS
+        ) {
             return plan(
                 category = DeviceCategory.CHINA_ANDROID_NO_GMS,
                 planId = CompatibilityPlanId.GMS_REPAIR_REQUIRED,
@@ -170,12 +190,12 @@ class RuleBasedCompatibilityPlanMatcher(
         return plan(
             category = DeviceCategory.UNKNOWN,
             planId = CompatibilityPlanId.UNSUPPORTED_OR_UNKNOWN,
-            status = CompatibilityPlanStatus.UNSUPPORTED,
+            status = CompatibilityPlanStatus.UNDETERMINED,
             evidence = baseEvidence,
             warnings = listOf(
                 warning(
                     CompatibilityWarningCode.INSUFFICIENT_EVIDENCE,
-                    "ROM 或设备证据不足，未强行推荐 Google 环境方案。",
+                    "未识别环境进入 generic Android fallback；证据不足时不强行推荐或标记为不支持。",
                 ),
             ),
             confidence = DetectionConfidence.UNKNOWN,
@@ -190,7 +210,8 @@ class RuleBasedCompatibilityPlanMatcher(
         return deviceRules.firstOrNull { rule ->
             val minSystemMajor = rule.minSystemMajor
             val maxSystemMajor = rule.maxSystemMajor
-            (rule.manufacturers.isEmpty() ||
+            context.rom.confidence == DetectionConfidence.HIGH &&
+                (rule.manufacturers.isEmpty() ||
                 rule.manufacturers.any { it.uppercase() in manufacturerValues }) &&
                 context.rom.family.name in rule.romFamilies &&
                 (minSystemMajor == null ||

@@ -32,7 +32,12 @@ class PropertyBasedRomIdentifier : RomIdentifier {
             family = RomFamily.COLOR_OS,
             displayName = "ColorOS",
             versionKeys = listOf("ro.build.version.opporom"),
-        ) ?: detectOriginOs(properties)
+        ) ?: detect(
+            properties = properties,
+            family = RomFamily.OXYGEN_OS,
+            displayName = "OxygenOS",
+            versionKeys = listOf("ro.oxygen.version", "ro.oxygen.version.name"),
+        ) ?: detectVivoOs(properties)
             ?: detect(
                 properties = properties,
                 family = RomFamily.MAGIC_OS,
@@ -46,7 +51,43 @@ class PropertyBasedRomIdentifier : RomIdentifier {
                 family = RomFamily.ONE_UI,
                 displayName = "One UI",
                 versionKeys = listOf("ro.build.version.oneui"),
-            ) ?: unknown(probe)
+            ) ?: detect(
+                properties = properties,
+                family = RomFamily.REALME_UI,
+                displayName = "realme UI",
+                versionKeys = listOf("ro.build.version.realmeui"),
+            ) ?: detect(
+                properties = properties,
+                family = RomFamily.MY_OS,
+                displayName = "MyOS",
+                versionKeys = listOf("ro.build.version.myos"),
+            ) ?: detect(
+                properties = properties,
+                family = RomFamily.NOTHING_OS,
+                displayName = "Nothing OS",
+                versionKeys = listOf("ro.build.version.nothing"),
+            ) ?: detect(
+                properties = properties,
+                family = RomFamily.TECNO_HIOS,
+                displayName = "HiOS",
+                versionKeys = listOf("ro.transsion.hios.version"),
+            ) ?: detect(
+                properties = properties,
+                family = RomFamily.INFINIX_XOS,
+                displayName = "XOS",
+                versionKeys = listOf("ro.transsion.xos.version"),
+            ) ?: detect(
+                properties = properties,
+                family = RomFamily.ITEL_OS,
+                displayName = "itel OS",
+                versionKeys = listOf("ro.transsion.itelos.version"),
+            ) ?: detect(
+                properties = properties,
+                family = RomFamily.TCL_UI,
+                displayName = "TCL UI",
+                versionKeys = listOf("ro.tcl.ui.version"),
+            ) ?: detectOemFallback(probe)
+            ?: unknown(probe)
     }
 
     private fun detect(
@@ -69,23 +110,58 @@ class PropertyBasedRomIdentifier : RomIdentifier {
         )
     }
 
-    private fun detectOriginOs(properties: Map<String, String>): RomIdentification? {
+    private fun detectVivoOs(properties: Map<String, String>): RomIdentification? {
         val name = properties["ro.vivo.os.name"]
         val version = properties["ro.vivo.os.version"]
-        if (name?.contains("origin", ignoreCase = true) != true) return null
+        val family = when {
+            name?.contains("origin", ignoreCase = true) == true -> RomFamily.ORIGIN_OS
+            name?.contains("funtouch", ignoreCase = true) == true -> RomFamily.FUNTOUCH_OS
+            else -> return null
+        }
 
         val evidence = buildList {
             add(DetectionEvidence("ro.vivo.os.name", name))
             version?.let { add(DetectionEvidence("ro.vivo.os.version", it)) }
         }
         return RomIdentification(
-            family = RomFamily.ORIGIN_OS,
-            displayName = "OriginOS",
+            family = family,
+            displayName = if (family == RomFamily.ORIGIN_OS) "OriginOS" else "Funtouch OS",
             version = version ?: name,
             confidence = DetectionConfidence.HIGH,
             evidence = evidence,
         )
     }
+
+    private fun detectOemFallback(probe: RomProbe): RomIdentification? {
+        val resolution = OEM_REGISTRY.resolve(probe.manufacturer, probe.brand)
+        val registration = resolution.registration ?: return probe.buildDisplay
+            .takeIf { it.contains("aosp", ignoreCase = true) }
+            ?.let {
+                RomIdentification(
+                    family = RomFamily.AOSP,
+                    displayName = "AOSP",
+                    version = null,
+                    confidence = DetectionConfidence.MEDIUM,
+                    evidence = listOf(DetectionEvidence("build.display", it)),
+                )
+            }
+        val family = registration.probableRomFamily ?: return null
+        return RomIdentification(
+            family = family,
+            displayName = family.displayName(),
+            version = null,
+            confidence = DetectionConfidence.MEDIUM,
+            evidence = listOf(
+                DetectionEvidence("oem.registry", registration.id),
+                DetectionEvidence("oem.alias", resolution.matchedAlias.orEmpty()),
+            ),
+        )
+    }
+
+    private fun RomFamily.displayName(): String = name
+        .lowercase()
+        .split('_')
+        .joinToString(" ") { it.replaceFirstChar(Char::uppercase) }
 
     private fun detectHarmonyOs5Plus(
         probe: RomProbe,
@@ -154,11 +230,21 @@ class PropertyBasedRomIdentifier : RomIdentifier {
             "ro.mi.os.version.incremental",
             "ro.miui.ui.version.name",
             "ro.build.version.opporom",
+            "ro.oxygen.version",
+            "ro.oxygen.version.name",
             "ro.vivo.os.name",
             "ro.vivo.os.version",
             "ro.build.version.magic",
             "ro.build.version.magicui",
             "ro.build.version.oneui",
+            "ro.build.version.realmeui",
+            "ro.build.version.myos",
+            "ro.build.version.nothing",
+            "ro.transsion.hios.version",
+            "ro.transsion.xos.version",
+            "ro.transsion.itelos.version",
+            "ro.tcl.ui.version",
         )
+        private val OEM_REGISTRY = OemBrandRegistry()
     }
 }

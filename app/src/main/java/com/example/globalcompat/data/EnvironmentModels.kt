@@ -20,13 +20,28 @@ data class AndroidPlatform(
 )
 
 enum class RomFamily {
-    HARMONY_OS,
-    HARMONY_OS_5_PLUS,
+    AOSP,
+    PIXEL_ANDROID,
+    ONE_UI,
     HYPER_OS,
     COLOR_OS,
+    OXYGEN_OS,
     ORIGIN_OS,
+    FUNTOUCH_OS,
     MAGIC_OS,
-    ONE_UI,
+    HARMONY_OS,
+    HARMONY_OS_5_PLUS,
+    MY_OS,
+    REALME_UI,
+    NOTHING_OS,
+    MOTOROLA_ANDROID,
+    ASUS_ANDROID,
+    SONY_ANDROID,
+    TECNO_HIOS,
+    INFINIX_XOS,
+    ITEL_OS,
+    TCL_UI,
+    HMD_ANDROID,
     UNKNOWN,
 }
 
@@ -89,5 +104,6 @@ data class EnvironmentReport(
     val rom: RomIdentification,
     val components: List<SystemComponent>,
     val googleCompatibilityLayer: GoogleCompatibilityLayerStatus,
+    val deviceProfile: DeviceProfile,
     val compatibilityPlan: CompatibilityPlan,
 )

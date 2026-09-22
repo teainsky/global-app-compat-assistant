@@ -192,6 +192,7 @@ private fun ScannerScreen(scanner: DeviceBaselineScanner) {
                                     deviceModel = result.environment.device.model,
                                     systemVersion = result.environment.rom.version,
                                     androidApiLevel = result.environment.android.apiLevel,
+                                    validationLevel = result.environment.deviceProfile.validationLevel,
                                 ),
                                 cancellation = cancellation,
                             ) { update ->
@@ -349,6 +350,15 @@ private fun EnvironmentReportView(
                 ReportRow("识别结果", report.rom.displayName)
                 ReportRow("版本", report.rom.version ?: "未识别")
                 ReportRow("置信度", report.rom.confidence.name)
+            }
+        }
+        item {
+            ReportSection("全球设备画像") {
+                ReportRow("平台", report.deviceProfile.platformFamily.name)
+                ReportRow("市场版本", report.deviceProfile.marketVariant.name)
+                ReportRow("Google 环境", report.deviceProfile.googleEnvironment.name)
+                ReportRow("安装能力", report.deviceProfile.installationCapability.name)
+                ReportRow("验证等级", report.deviceProfile.validationLevel.name)
             }
         }
         item {

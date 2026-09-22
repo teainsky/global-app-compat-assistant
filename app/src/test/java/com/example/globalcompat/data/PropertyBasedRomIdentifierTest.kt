@@ -52,6 +52,60 @@ class PropertyBasedRomIdentifierTest {
     }
 
     @Test
+    fun `identifies extended global ROM property contracts`() {
+        val cases = listOf(
+            "ro.oxygen.version" to RomFamily.OXYGEN_OS,
+            "ro.build.version.realmeui" to RomFamily.REALME_UI,
+            "ro.build.version.myos" to RomFamily.MY_OS,
+            "ro.build.version.nothing" to RomFamily.NOTHING_OS,
+            "ro.transsion.hios.version" to RomFamily.TECNO_HIOS,
+            "ro.transsion.xos.version" to RomFamily.INFINIX_XOS,
+            "ro.transsion.itelos.version" to RomFamily.ITEL_OS,
+            "ro.tcl.ui.version" to RomFamily.TCL_UI,
+        )
+
+        cases.forEach { (property, expectedFamily) ->
+            assertEquals(
+                expectedFamily,
+                identify(properties = mapOf(property to "test-version")).family,
+            )
+        }
+    }
+
+    @Test
+    fun `identifies Funtouch separately from OriginOS`() {
+        val result = identify(
+            manufacturer = "vivo",
+            brand = "vivo",
+            properties = mapOf(
+                "ro.vivo.os.name" to "Funtouch OS",
+                "ro.vivo.os.version" to "15",
+            ),
+        )
+
+        assertEquals(RomFamily.FUNTOUCH_OS, result.family)
+        assertEquals("15", result.version)
+    }
+
+    @Test
+    fun `known global OEM fallback remains only medium confidence evidence`() {
+        val cases = listOf(
+            Triple("samsung", "samsung", RomFamily.ONE_UI),
+            Triple("Google", "google", RomFamily.PIXEL_ANDROID),
+            Triple("motorola", "motorola", RomFamily.MOTOROLA_ANDROID),
+            Triple("TECNO", "TECNO", RomFamily.TECNO_HIOS),
+            Triple("Infinix", "Infinix", RomFamily.INFINIX_XOS),
+            Triple("itel", "itel", RomFamily.ITEL_OS),
+        )
+
+        cases.forEach { (manufacturer, brand, expectedFamily) ->
+            val result = identify(manufacturer = manufacturer, brand = brand)
+            assertEquals(expectedFamily, result.family)
+            assertEquals(DetectionConfidence.MEDIUM, result.confidence)
+        }
+    }
+
+    @Test
     fun `does not infer HarmonyOS from Huawei brand alone`() {
         val result = identify(manufacturer = "HUAWEI", brand = "HUAWEI")
 

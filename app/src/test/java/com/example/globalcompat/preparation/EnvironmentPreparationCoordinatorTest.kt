@@ -6,6 +6,7 @@ import com.example.globalcompat.catalog.CatalogUpdateStatus
 import com.example.globalcompat.catalog.ComponentCatalog
 import com.example.globalcompat.data.CompatibilityPlanId
 import com.example.globalcompat.data.DeviceCategory
+import com.example.globalcompat.data.GlobalValidationLevel
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -167,6 +168,22 @@ class EnvironmentPreparationCoordinatorTest {
         assertTrue(result.installationAllowed)
     }
 
+    @Test
+    fun `probable and environment verified downloads never unlock installation`() {
+        listOf(
+            GlobalValidationLevel.PROBABLE,
+            GlobalValidationLevel.ENVIRONMENT_VERIFIED,
+        ).forEach { validationLevel ->
+            val fixture = fixture()
+            val result = fixture.coordinator.prepare(
+                EXACT_VERIFIED_REQUEST.copy(validationLevel = validationLevel),
+            )
+
+            assertEquals(EnvironmentPreparationStatus.DOWNLOAD_VERIFIED_READY, result.status)
+            assertFalse(result.installationAllowed)
+        }
+    }
+
     private fun fixture(
         mode: DownloadMode = DownloadMode.NORMAL,
         catalogStatus: CatalogUpdateStatus = CatalogUpdateStatus.REMOTE_VERIFIED,
@@ -292,10 +309,12 @@ class EnvironmentPreparationCoordinatorTest {
             deviceModel = "Huawei Pura 70 Pro+",
             systemVersion = "4.2",
             androidApiLevel = 31,
+            validationLevel = GlobalValidationLevel.PROBABLE,
         )
         val EXACT_VERIFIED_REQUEST = HARMONY_42_REQUEST.copy(
             deviceModel = "HBN-AL80",
             systemVersion = "4.2.0",
+            validationLevel = GlobalValidationLevel.DEVICE_VERIFIED,
         )
     }
 }

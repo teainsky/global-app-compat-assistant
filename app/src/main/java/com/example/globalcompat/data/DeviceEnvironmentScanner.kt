@@ -12,6 +12,8 @@ class DeviceEnvironmentScanner(
         DeferredGoogleCompatibilityLayerDetector(),
     private val compatibilityPlanMatcher: CompatibilityPlanMatcher =
         RuleBasedCompatibilityPlanMatcher(),
+    private val deviceProfileClassifier: GlobalDeviceProfileClassifier =
+        GlobalDeviceProfileClassifier(),
     private val clock: () -> Long = System::currentTimeMillis,
 ) {
     fun scan(): EnvironmentReport {
@@ -43,23 +45,31 @@ class DeviceEnvironmentScanner(
         )
         val components = componentScanner.scan()
         val googleCompatibilityLayer = compatibilityLayerDetector.detect(components)
+        val deviceProfile = deviceProfileClassifier.classify(
+            device = device,
+            android = android,
+            rom = rom,
+            components = components,
+        )
         val compatibilityPlan = compatibilityPlanMatcher.match(
             CompatibilityContext(
                 device = device,
                 android = android,
                 rom = rom,
                 components = components,
+                deviceProfile = deviceProfile,
             ),
         )
 
         return EnvironmentReport(
-            schemaVersion = 2,
+            schemaVersion = 3,
             scannedAtEpochMillis = clock(),
             device = device,
             android = android,
             rom = rom,
             components = components,
             googleCompatibilityLayer = googleCompatibilityLayer,
+            deviceProfile = deviceProfile,
             compatibilityPlan = compatibilityPlan,
         )
     }

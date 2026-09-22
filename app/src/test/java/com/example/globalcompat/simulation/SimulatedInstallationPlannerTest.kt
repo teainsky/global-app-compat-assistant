@@ -17,8 +17,15 @@ import com.example.globalcompat.data.CompatibilityPlanStatus
 import com.example.globalcompat.data.DetectionConfidence
 import com.example.globalcompat.data.DeviceCategory
 import com.example.globalcompat.data.DeviceIdentity
+import com.example.globalcompat.data.DeviceProfile
 import com.example.globalcompat.data.EnvironmentReport
+import com.example.globalcompat.data.GlobalValidationLevel
+import com.example.globalcompat.data.GoogleEnvironment
 import com.example.globalcompat.data.GoogleCompatibilityLayerStatus
+import com.example.globalcompat.data.InstallationCapability
+import com.example.globalcompat.data.MarketVariant
+import com.example.globalcompat.data.OsFamily
+import com.example.globalcompat.data.PlatformFamily
 import com.example.globalcompat.data.RomFamily
 import com.example.globalcompat.data.RomIdentification
 import com.example.globalcompat.installation.InstallationBlockReason
@@ -49,6 +56,7 @@ class SimulatedInstallationPlannerTest {
         assertTrue(result.selectedArtifacts.all {
             it.compatibilityStatus == CompatibilityValidationStatus.DEVICE_VERIFIED
         })
+        assertEquals(GlobalValidationLevel.DEVICE_VERIFIED, result.validationLevel)
         assertFalse(result.realInstallationAllowed)
     }
 
@@ -296,7 +304,7 @@ class SimulatedInstallationPlannerTest {
         planId: CompatibilityPlanId,
         planStatus: CompatibilityPlanStatus,
     ) = EnvironmentReport(
-        schemaVersion = 2,
+        schemaVersion = 3,
         scannedAtEpochMillis = 1L,
         device = DeviceIdentity(
             brand = "HUAWEI",
@@ -331,6 +339,37 @@ class SimulatedInstallationPlannerTest {
         googleCompatibilityLayer = GoogleCompatibilityLayerStatus(
             assessment = CompatibilityLayerAssessment.NOT_ASSESSED,
             note = "Not assessed",
+        ),
+        deviceProfile = DeviceProfile(
+            manufacturer = "HUAWEI",
+            brand = "HUAWEI",
+            model = model,
+            deviceFamily = model,
+            marketVariant = MarketVariant.UNKNOWN,
+            platformFamily = if (romFamily == RomFamily.HARMONY_OS_5_PLUS) {
+                PlatformFamily.HARMONY_NATIVE
+            } else {
+                PlatformFamily.HARMONY_ANDROID_COMPAT
+            },
+            osFamily = OsFamily.HARMONY_OS,
+            osVersion = romVersion,
+            androidApiLevel = 31,
+            romFamily = romFamily,
+            romVersion = romVersion,
+            googleEnvironment = GoogleEnvironment.GMS_ABSENT,
+            installationCapability = if (romFamily == RomFamily.HARMONY_OS_5_PLUS) {
+                InstallationCapability.NOT_APPLICABLE
+            } else {
+                InstallationCapability.LEGACY_HARMONY_COMPATIBLE
+            },
+            validationLevel = if (model == "HBN-AL80" && romVersion == "4.2.0") {
+                GlobalValidationLevel.DEVICE_VERIFIED
+            } else if (romFamily == RomFamily.HARMONY_OS_5_PLUS) {
+                GlobalValidationLevel.BLOCKED
+            } else {
+                GlobalValidationLevel.PROBABLE
+            },
+            evidence = emptyList(),
         ),
         compatibilityPlan = CompatibilityPlan(
             deviceCategory = category,

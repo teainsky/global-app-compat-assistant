@@ -4,6 +4,7 @@ enum class CompatibilityPlanStatus {
     READY,
     CONFIGURATION_REQUIRED,
     REPAIR_REQUIRED,
+    UNDETERMINED,
     UNSUPPORTED,
 }
 
@@ -62,4 +63,5 @@ data class CompatibilityContext(
     val android: AndroidPlatform,
     val rom: RomIdentification,
     val components: List<SystemComponent>,
+    val deviceProfile: DeviceProfile,
 )

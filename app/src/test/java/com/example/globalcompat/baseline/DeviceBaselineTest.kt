@@ -14,8 +14,15 @@ import com.example.globalcompat.data.CompatibilityLayerAssessment
 import com.example.globalcompat.data.DetectionConfidence
 import com.example.globalcompat.data.DeviceCategory
 import com.example.globalcompat.data.DeviceIdentity
+import com.example.globalcompat.data.DeviceProfile
 import com.example.globalcompat.data.EnvironmentReport
+import com.example.globalcompat.data.GlobalValidationLevel
+import com.example.globalcompat.data.GoogleEnvironment
 import com.example.globalcompat.data.GoogleCompatibilityLayerStatus
+import com.example.globalcompat.data.InstallationCapability
+import com.example.globalcompat.data.MarketVariant
+import com.example.globalcompat.data.OsFamily
+import com.example.globalcompat.data.PlatformFamily
 import com.example.globalcompat.data.RomFamily
 import com.example.globalcompat.data.RomIdentification
 import com.example.globalcompat.validation.DeviceValidationEvidenceLevel
@@ -399,7 +406,7 @@ class DeviceBaselineTest {
     }
 
     private fun environment() = EnvironmentReport(
-        schemaVersion = 2,
+        schemaVersion = 3,
         scannedAtEpochMillis = NOW,
         device = DeviceIdentity(
             brand = "HUAWEI",
@@ -430,6 +437,23 @@ class DeviceBaselineTest {
         googleCompatibilityLayer = GoogleCompatibilityLayerStatus(
             assessment = CompatibilityLayerAssessment.NOT_ASSESSED,
             note = "Not assessed",
+        ),
+        deviceProfile = DeviceProfile(
+            manufacturer = "HUAWEI",
+            brand = "HUAWEI",
+            model = "Huawei Pura 70 Pro+",
+            deviceFamily = "Huawei Pura 70 Pro+",
+            marketVariant = MarketVariant.UNKNOWN,
+            platformFamily = PlatformFamily.HARMONY_ANDROID_COMPAT,
+            osFamily = OsFamily.HARMONY_OS,
+            osVersion = "4.2",
+            androidApiLevel = 31,
+            romFamily = RomFamily.HARMONY_OS,
+            romVersion = "4.2",
+            googleEnvironment = GoogleEnvironment.UNKNOWN,
+            installationCapability = InstallationCapability.LEGACY_HARMONY_COMPATIBLE,
+            validationLevel = GlobalValidationLevel.PROBABLE,
+            evidence = emptyList(),
         ),
         compatibilityPlan = CompatibilityPlan(
             deviceCategory = DeviceCategory.HUAWEI_HARMONY_ANDROID_COMPAT,

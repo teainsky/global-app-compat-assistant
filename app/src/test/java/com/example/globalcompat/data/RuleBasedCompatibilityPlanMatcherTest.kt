@@ -103,6 +103,7 @@ class RuleBasedCompatibilityPlanMatcherTest {
                 brand = manufacturer,
                 model = model,
                 romFamily = romFamily,
+                marketVariant = MarketVariant.CHINA_MAINLAND,
                 components = components(gms = ABSENT, store = ABSENT),
             )
             assertPlan(
@@ -111,6 +112,22 @@ class RuleBasedCompatibilityPlanMatcherTest {
                 CompatibilityPlanId.GMS_REPAIR_REQUIRED,
             )
         }
+    }
+
+    @Test
+    fun `China Android category is not inferred when market variant is unknown`() {
+        val plan = match(
+            manufacturer = "Xiaomi",
+            brand = "Redmi",
+            model = "unknown-market-model",
+            romFamily = RomFamily.HYPER_OS,
+            romVersion = "2.0",
+            marketVariant = MarketVariant.UNKNOWN,
+            components = components(gms = ABSENT, store = ABSENT),
+        )
+
+        assertPlan(plan, DeviceCategory.UNKNOWN, CompatibilityPlanId.UNSUPPORTED_OR_UNKNOWN)
+        assertEquals(CompatibilityPlanStatus.UNDETERMINED, plan.status)
     }
 
     @Test
@@ -164,6 +181,7 @@ class RuleBasedCompatibilityPlanMatcherTest {
         )
 
         assertPlan(plan, DeviceCategory.UNKNOWN, CompatibilityPlanId.UNSUPPORTED_OR_UNKNOWN)
+        assertEquals(CompatibilityPlanStatus.UNDETERMINED, plan.status)
         assertEquals(DetectionConfidence.UNKNOWN, plan.confidence)
     }
 
@@ -183,41 +201,54 @@ class RuleBasedCompatibilityPlanMatcherTest {
         model: String,
         romFamily: RomFamily,
         romVersion: String? = null,
+        marketVariant: MarketVariant = MarketVariant.UNKNOWN,
         components: List<SystemComponent>,
-    ): CompatibilityPlan = matcher.match(
-        CompatibilityContext(
-            device = DeviceIdentity(
-                brand = brand,
-                manufacturer = manufacturer,
-                model = model,
-                product = model,
-                device = model,
-                hardware = "test",
-                board = "test",
-                supportedAbis = listOf("arm64-v8a"),
+    ): CompatibilityPlan {
+        val device = DeviceIdentity(
+            brand = brand,
+            manufacturer = manufacturer,
+            model = model,
+            product = model,
+            device = model,
+            hardware = "test",
+            board = "test",
+            supportedAbis = listOf("arm64-v8a"),
+        )
+        val android = AndroidPlatform(
+            apiLevel = 34,
+            release = "14",
+            securityPatch = "2026-09-01",
+            buildDisplay = "test-build",
+            buildIncremental = "1",
+            fingerprint = "test/fingerprint",
+        )
+        val rom = RomIdentification(
+            family = romFamily,
+            displayName = romFamily.name,
+            version = romVersion,
+            confidence = if (romFamily == RomFamily.UNKNOWN) {
+                DetectionConfidence.UNKNOWN
+            } else {
+                DetectionConfidence.HIGH
+            },
+            evidence = listOf(DetectionEvidence("test.rom", romFamily.name)),
+        )
+        return matcher.match(
+            CompatibilityContext(
+                device = device,
+                android = android,
+                rom = rom,
+                components = components,
+                deviceProfile = GlobalDeviceProfileClassifier().classify(
+                    device = device,
+                    android = android,
+                    rom = rom,
+                    components = components,
+                    marketVariant = marketVariant,
+                ),
             ),
-            android = AndroidPlatform(
-                apiLevel = 34,
-                release = "14",
-                securityPatch = "2026-09-01",
-                buildDisplay = "test-build",
-                buildIncremental = "1",
-                fingerprint = "test/fingerprint",
-            ),
-            rom = RomIdentification(
-                family = romFamily,
-                displayName = romFamily.name,
-                version = romVersion,
-                confidence = if (romFamily == RomFamily.UNKNOWN) {
-                    DetectionConfidence.UNKNOWN
-                } else {
-                    DetectionConfidence.HIGH
-                },
-                evidence = listOf(DetectionEvidence("test.rom", romFamily.name)),
-            ),
-            components = components,
-        ),
-    )
+        )
+    }
 
     private fun components(
         gms: Presence,

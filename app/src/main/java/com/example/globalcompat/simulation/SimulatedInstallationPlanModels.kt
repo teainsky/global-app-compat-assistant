@@ -6,6 +6,7 @@ import com.example.globalcompat.catalog.ComponentSourceType
 import com.example.globalcompat.catalog.SourceAvailabilityStatus
 import com.example.globalcompat.data.CompatibilityPlanId
 import com.example.globalcompat.data.DeviceCategory
+import com.example.globalcompat.data.GlobalValidationLevel
 
 enum class SimulationPlanStatus {
     NO_ACTION_REQUIRED,
@@ -100,6 +101,7 @@ data class SimulatedInstallationPlan(
     val deviceModel: String,
     val systemVersion: String,
     val androidApiLevel: Int,
+    val validationLevel: GlobalValidationLevel,
     val selectedReleaseTag: String?,
     val selectedArtifacts: List<SimulatedArtifact>,
     val currentComponents: List<CurrentComponentDecision>,
