@@ -1,6 +1,7 @@
 package com.example.globalcompat.catalog
 
 import com.google.gson.Gson
+import com.google.gson.JsonArray
 import com.google.gson.JsonParser
 import java.nio.charset.StandardCharsets
 
@@ -22,6 +23,9 @@ class CompatibilityCatalogCodec(
         val schemaVersion = runCatching { root.get("schemaVersion")?.asInt }.getOrNull()
         if (schemaVersion != SUPPORTED_SCHEMA_VERSION) {
             return CatalogDecodeResult.UnsupportedSchema(schemaVersion)
+        }
+        if (!root.has("verifiedDeviceRecords")) {
+            root.add("verifiedDeviceRecords", JsonArray())
         }
         return runCatching {
             gson.fromJson(root, ComponentCatalog::class.java)

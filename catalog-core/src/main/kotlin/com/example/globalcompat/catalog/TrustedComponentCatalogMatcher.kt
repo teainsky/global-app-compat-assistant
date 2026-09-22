@@ -45,7 +45,9 @@ class TrustedComponentCatalogMatcher {
 
         val policy = catalog.verificationPolicy
         val requiredVariant = policy.requiredVariantByPlan[request.planId] ?: return EMPTY_SELECTION
-        val compatibleReleases = catalog.releases.filter { release ->
+        val compatibleReleases = catalog.releases.map { release ->
+            release.withExactDeviceVerification(catalog, request)
+        }.filter { release ->
             release.compatibilityStatus != CompatibilityValidationStatus.BLOCKED &&
                 release.compatibilityStatus != CompatibilityValidationStatus.DEPRECATED &&
                 release.compatibility.matches(request, requiredVariant) &&
@@ -142,6 +144,32 @@ class TrustedComponentCatalogMatcher {
         return harmonyMajor in minHarmonyOsMajor..maxHarmonyOsMajor
     }
 
+    private fun ComponentRelease.withExactDeviceVerification(
+        catalog: ComponentCatalog,
+        request: CatalogMatchRequest,
+    ): ComponentRelease {
+        val exactRecord = catalog.verifiedDeviceRecords.singleOrNull { record ->
+            record.compatibilityStatus == CompatibilityValidationStatus.DEVICE_VERIFIED &&
+                record.deviceModel == request.deviceFamily &&
+                record.deviceFamily == request.deviceFamily &&
+                record.romFamily == HARMONY_OS_ROM_FAMILY &&
+                request.systemFamily == CatalogSystemFamily.HUAWEI_HARMONY_OS &&
+                record.harmonyOsVersion == request.systemVersion &&
+                record.androidApiLevel == request.androidApiLevel &&
+                record.componentRelease == releaseTag
+        } ?: return this
+        return copy(
+            compatibilityStatus = CompatibilityValidationStatus.DEVICE_VERIFIED,
+            artifacts = artifacts.map { artifact ->
+                artifact.copy(
+                    compatibilityStatus = CompatibilityValidationStatus.DEVICE_VERIFIED,
+                    verifiedDeviceFamilies = listOf(exactRecord.deviceModel),
+                    verifiedSystemVersions = listOf(exactRecord.harmonyOsVersion),
+                )
+            },
+        )
+    }
+
     private fun ComponentRelease.eligibleArtifacts(
         catalog: ComponentCatalog,
         policy: VerificationPolicy,
@@ -201,6 +229,7 @@ class TrustedComponentCatalogMatcher {
             "microg_services_huawei_compatible",
             "microg_companion_huawei_compatible",
         )
+        const val HARMONY_OS_ROM_FAMILY = "HARMONY_OS"
         val EMPTY_SELECTION = CatalogSelection(
             compatibleReleases = emptyList(),
             compatibleArtifacts = emptyList(),

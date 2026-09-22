@@ -4,6 +4,14 @@ import java.nio.file.Path
 import kotlin.system.exitProcess
 
 fun main(args: Array<String>) {
+    if ("--generate-catalog-signing-key" in args) {
+        runCatalogSigningKeyGeneration(args)
+        return
+    }
+    if ("--publish-signed-catalog" in args) {
+        runSignedCatalogPublication(args)
+        return
+    }
     if ("--inventory" in args) {
         runInventory()
         return
@@ -34,6 +42,32 @@ fun main(args: Array<String>) {
     AuditReportWriter().write(report, outputDirectory)
     println("Catalog audit ${report.status}: ${outputDirectory.resolve("audit-report.json")}")
     if (report.status != AuditStatus.PASS) exitProcess(2)
+}
+
+private fun runCatalogSigningKeyGeneration(args: Array<String>) {
+    val privateKeyPath = Path.of(argument(args, "--private-key-pkcs8"))
+    val publicKeyPath = Path.of(argument(args, "--public-key-x509"))
+    CatalogSigningKeyGenerator.generate(privateKeyPath, publicKeyPath)
+    println("Generated catalog signing keypair; private key remains local: $privateKeyPath")
+}
+
+private fun runSignedCatalogPublication(args: Array<String>) {
+    val evidencePath = Path.of(argument(args, "--evidence"))
+    val inputCatalogPath = Path.of(argument(args, "--input-catalog"))
+    val privateKeyPath = Path.of(argument(args, "--private-key-pkcs8"))
+    val publicKeyPath = Path.of(argument(args, "--public-key-x509"))
+    val outputCatalogPath = Path.of(argument(args, "--output-catalog"))
+    val outputSignaturePath = Path.of(argument(args, "--output-signature"))
+    val publication = SignedCatalogPublishingPipeline().publish(
+        evidenceBytes = java.nio.file.Files.readAllBytes(evidencePath),
+        expectedEvidenceSha256 = argument(args, "--expected-evidence-sha256"),
+        existingCatalogBytes = java.nio.file.Files.readAllBytes(inputCatalogPath),
+        privateKeyPkcs8 = java.nio.file.Files.readAllBytes(privateKeyPath),
+        publicKeyX509 = java.nio.file.Files.readAllBytes(publicKeyPath),
+        publishedAt = argument(args, "--published-at"),
+    )
+    SignedCatalogWriter.write(publication, outputCatalogPath, outputSignaturePath)
+    println("Signed compatibility catalog published: $outputCatalogPath")
 }
 
 private fun runDeviceRecordPublication(args: Array<String>) {

@@ -3,6 +3,8 @@ package com.example.globalcompat.preparation
 import com.example.globalcompat.catalog.ArtifactIntegrityStatus
 import com.example.globalcompat.catalog.ArtifactSourceRecord
 import com.example.globalcompat.catalog.CatalogRuntimeState
+import com.example.globalcompat.catalog.CatalogMatchRequest
+import com.example.globalcompat.catalog.CatalogSystemFamily
 import com.example.globalcompat.catalog.CatalogUpdateStatus
 import com.example.globalcompat.catalog.CompatibilityValidationStatus
 import com.example.globalcompat.catalog.ComponentArtifact
@@ -10,6 +12,7 @@ import com.example.globalcompat.catalog.ComponentRelease
 import com.example.globalcompat.catalog.ComponentSourceType
 import com.example.globalcompat.catalog.ComponentVariant
 import com.example.globalcompat.catalog.SourceAvailabilityStatus
+import com.example.globalcompat.catalog.TrustedComponentCatalogMatcher
 import com.example.globalcompat.data.CompatibilityPlanId
 import com.example.globalcompat.data.DeviceCategory
 import java.io.File
@@ -244,21 +247,23 @@ class EnvironmentPreparationCoordinator(
                 "Legacy Huawei preparation is not allowed for this device branch",
             )
         }
-        val harmonyMajor = request.systemVersion.majorVersion()
+        val systemVersion = request.systemVersion
             ?: return SelectionResult.Rejected(
                 EnvironmentPreparationFailure.CATALOG_METADATA_INVALID,
                 "HarmonyOS version is required",
             )
-        val releases = catalogState.activeCatalog.releases.filter { release ->
-            release.compatibility.requiredPlanId == request.planId &&
-                release.compatibility.requiredDeviceCategory == request.deviceCategory &&
-                harmonyMajor in release.compatibility.minHarmonyOsMajor..
-                release.compatibility.maxHarmonyOsMajor &&
-                release.compatibilityStatus !in BLOCKED_COMPATIBILITY_STATUSES &&
-                release.artifacts.mapTo(mutableSetOf()) { it.componentId }
-                    .containsAll(REQUIRED_COMPONENT_IDS)
-        }
-        val release = releases.singleOrNull()
+        val selection = TrustedComponentCatalogMatcher().select(
+            catalogState.activeCatalog,
+            CatalogMatchRequest(
+                planId = request.planId,
+                deviceCategory = request.deviceCategory,
+                deviceFamily = request.deviceModel,
+                systemFamily = CatalogSystemFamily.HUAWEI_HARMONY_OS,
+                systemVersion = systemVersion,
+                androidApiLevel = request.androidApiLevel,
+            ),
+        )
+        val release = selection.compatibleReleases.singleOrNull()
             ?: return SelectionResult.Rejected(
                 EnvironmentPreparationFailure.CATALOG_METADATA_INVALID,
                 "Expected exactly one explicit Huawei component release",
@@ -422,9 +427,6 @@ class EnvironmentPreparationCoordinator(
 
     private fun String.normalizeDigest(): String = replace(":", "").lowercase()
 
-    private fun String?.majorVersion(): Int? =
-        this?.let { VERSION_NUMBER.find(it)?.value?.toIntOrNull() }
-
     private data class SelectedArtifact(
         val release: ComponentRelease,
         val artifact: ComponentArtifact,
@@ -464,6 +466,5 @@ class EnvironmentPreparationCoordinator(
             CompatibilityValidationStatus.DEPRECATED,
         )
         val SHA256 = Regex("[0-9a-f]{64}")
-        val VERSION_NUMBER = Regex("\\d+")
     }
 }

@@ -1,6 +1,7 @@
 package com.example.globalcompat.baseline
 
 import android.content.Context
+import com.example.globalcompat.artifact.OnDeviceArtifactAuditReport
 import com.example.globalcompat.catalog.BuiltInComponentCatalog
 import com.example.globalcompat.data.DeviceEnvironmentScanner
 import com.example.globalcompat.data.EnvironmentReport
@@ -45,6 +46,33 @@ class DeviceBaselineScanner(
         )
         return DeviceBaselineScanResult(
             environment = environment,
+            componentComparisons = comparisons,
+            simulatedInstallationPlan = simulatedPlan,
+            installationSessionPlan = installationExecutionGate.evaluate(simulatedPlan),
+        )
+    }
+
+    fun applyArtifactAudit(
+        scanResult: DeviceBaselineScanResult,
+        auditReport: OnDeviceArtifactAuditReport,
+    ): DeviceBaselineScanResult {
+        val auditedHashes = auditReport.components.mapNotNull { component ->
+            component.installedApkSha256?.let { component.packageName to it }
+        }.toMap()
+        val comparisons = componentMatcher.compare(
+            fingerprints = scanResult.componentComparisons.map { it.fingerprint },
+            context = ComponentMatchContext(
+                manufacturer = scanResult.environment.device.manufacturer,
+                romFamily = scanResult.environment.rom.family,
+                romVersion = scanResult.environment.rom.version,
+            ),
+            actualArtifactSha256ByPackage = auditedHashes,
+        )
+        val simulatedPlan = simulatedInstallationPlanner.create(
+            environment = scanResult.environment,
+            comparisons = comparisons,
+        )
+        return scanResult.copy(
             componentComparisons = comparisons,
             simulatedInstallationPlan = simulatedPlan,
             installationSessionPlan = installationExecutionGate.evaluate(simulatedPlan),

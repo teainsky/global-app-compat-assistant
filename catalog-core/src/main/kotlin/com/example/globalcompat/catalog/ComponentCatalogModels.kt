@@ -15,6 +15,7 @@ data class ComponentCatalog(
     val minClientVersion: Long = 1L,
     val deviceRules: List<DeviceClassificationRule> = emptyList(),
     val compatibilityRecords: List<CatalogCompatibilityRecord> = emptyList(),
+    val verifiedDeviceRecords: List<CatalogVerifiedDeviceCompatibilityRecord> = emptyList(),
     val blockedVersions: List<BlockedVersionRule> = emptyList(),
     val warnings: List<CatalogWarning> = emptyList(),
     val installationGatePolicy: InstallationGatePolicy = InstallationGatePolicy(),
@@ -44,6 +45,21 @@ data class CatalogCompatibilityRecord(
     val authority: CompatibilityEvidenceAuthority,
     val verifiedDeviceFamilies: List<String>,
     val verifiedSystemVersions: List<String>,
+)
+
+data class CatalogVerifiedDeviceCompatibilityRecord(
+    val schemaVersion: Int,
+    val deviceModel: String,
+    val deviceFamily: String,
+    val romFamily: String,
+    val harmonyOsVersion: String,
+    val androidApiLevel: Int,
+    val componentRelease: String,
+    val componentVersionCodes: Map<String, String>,
+    val componentSignerDigests: Map<String, List<String>>,
+    val validationDate: String,
+    val evidenceDigest: String,
+    val compatibilityStatus: CompatibilityValidationStatus,
 )
 
 data class BlockedVersionRule(
@@ -233,6 +249,7 @@ data class CatalogMatchRequest(
     val deviceFamily: String,
     val systemFamily: CatalogSystemFamily,
     val systemVersion: String,
+    val androidApiLevel: Int,
 )
 
 data class CatalogSelection(

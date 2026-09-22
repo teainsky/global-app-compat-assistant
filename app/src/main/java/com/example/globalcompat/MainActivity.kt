@@ -189,7 +189,9 @@ private fun ScannerScreen(scanner: DeviceBaselineScanner) {
                                 request = EnvironmentPreparationRequest(
                                     deviceCategory = result.environment.compatibilityPlan.deviceCategory,
                                     planId = result.environment.compatibilityPlan.planId,
+                                    deviceModel = result.environment.device.model,
                                     systemVersion = result.environment.rom.version,
+                                    androidApiLevel = result.environment.android.apiLevel,
                                 ),
                                 cancellation = cancellation,
                             ) { update ->
@@ -207,7 +209,7 @@ private fun ScannerScreen(scanner: DeviceBaselineScanner) {
                     val result = checkNotNull(scanResult)
                     isAuditingInstalledArtifacts = true
                     scope.launch {
-                        artifactAuditReport = withContext(Dispatchers.IO) {
+                        val report = withContext(Dispatchers.IO) {
                             artifactAuditService.audit(
                                 deviceProfile = ValidationDeviceProfile(
                                     manufacturer = result.environment.device.manufacturer,
@@ -222,6 +224,8 @@ private fun ScannerScreen(scanner: DeviceBaselineScanner) {
                                 ),
                             )
                         }
+                        artifactAuditReport = report
+                        scanResult = scanner.applyArtifactAudit(result, report)
                         isAuditingInstalledArtifacts = false
                     }
                 },

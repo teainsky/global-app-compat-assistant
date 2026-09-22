@@ -2,6 +2,8 @@ package com.example.globalcompat.audit
 
 import com.example.globalcompat.catalog.BlockedVersionRule
 import com.example.globalcompat.catalog.BuiltInComponentCatalog
+import com.example.globalcompat.catalog.CatalogSignatureVerifier
+import com.example.globalcompat.catalog.CompatibilityValidationStatus
 import com.example.globalcompat.validation.DeviceRecordPublicationRejection
 import com.example.globalcompat.validation.DeviceRecordPublicationResult
 import com.example.globalcompat.validation.DeviceValidationEvidenceInput
@@ -20,6 +22,8 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.security.MessageDigest
+import java.security.KeyPairGenerator
+import java.security.spec.ECGenParameterSpec
 
 class DeviceVerificationPublishingPipelineTest {
     private val gson = Gson()
@@ -46,6 +50,42 @@ class DeviceVerificationPublishingPipelineTest {
             artifacts.associate { it.packageName to it.artifactVersionCode },
             result.record.componentVersionCodes,
         )
+    }
+
+    @Test
+    fun `approved evidence is added to a newly signed exact-profile catalog`() {
+        val evidence = evidenceBytes(fullReport())
+        val keyPair = KeyPairGenerator.getInstance("EC").run {
+            initialize(ECGenParameterSpec("secp256r1"))
+            generateKeyPair()
+        }
+
+        val publication = SignedCatalogPublishingPipeline().publish(
+            evidenceBytes = evidence,
+            expectedEvidenceSha256 = sha256(evidence),
+            existingCatalogBytes = checkNotNull(
+                javaClass.getResourceAsStream("/compatibility-catalog.json"),
+            ).use { it.readBytes() },
+            privateKeyPkcs8 = keyPair.private.encoded,
+            publicKeyX509 = keyPair.public.encoded,
+            publishedAt = "2026-09-22T12:00:00+08:00",
+        )
+
+        assertTrue(
+            CatalogSignatureVerifier(keyPair.public.encoded).verify(
+                publication.catalogBytes,
+                publication.signatureBytes,
+            ),
+        )
+        val record = publication.catalog.verifiedDeviceRecords.single {
+            it.deviceModel == DEVICE.model
+        }
+        assertEquals(DEVICE.model, record.deviceModel)
+        assertEquals("4.2", record.harmonyOsVersion)
+        assertEquals(31, record.androidApiLevel)
+        assertEquals(CompatibilityValidationStatus.DEVICE_VERIFIED, record.compatibilityStatus)
+        assertEquals(sha256(evidence), record.evidenceDigest)
+        assertEquals(catalog.catalogVersion + 1, publication.catalog.catalogVersion)
     }
 
     @Test

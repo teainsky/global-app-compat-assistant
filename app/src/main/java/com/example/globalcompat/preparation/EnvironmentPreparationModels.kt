@@ -39,7 +39,9 @@ enum class EnvironmentPreparationFailure {
 data class EnvironmentPreparationRequest(
     val deviceCategory: DeviceCategory,
     val planId: CompatibilityPlanId,
+    val deviceModel: String,
     val systemVersion: String?,
+    val androidApiLevel: Int,
 )
 
 data class EnvironmentPreparationProgress(

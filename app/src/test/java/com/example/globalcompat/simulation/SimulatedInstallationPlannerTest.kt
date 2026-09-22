@@ -6,6 +6,7 @@ import com.example.globalcompat.baseline.InstalledComponentFingerprint
 import com.example.globalcompat.baseline.OfficialComponentMatcher
 import com.example.globalcompat.baseline.OfficialComponentMatchStatus
 import com.example.globalcompat.catalog.BuiltInComponentCatalog
+import com.example.globalcompat.catalog.CompatibilityValidationStatus
 import com.example.globalcompat.catalog.InstalledArtifactSignatureStatus
 import com.example.globalcompat.catalog.SourceAvailabilityStatus
 import com.example.globalcompat.data.AndroidPlatform
@@ -20,6 +21,8 @@ import com.example.globalcompat.data.EnvironmentReport
 import com.example.globalcompat.data.GoogleCompatibilityLayerStatus
 import com.example.globalcompat.data.RomFamily
 import com.example.globalcompat.data.RomIdentification
+import com.example.globalcompat.installation.InstallationBlockReason
+import com.example.globalcompat.installation.InstallationExecutionGate
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -43,6 +46,9 @@ class SimulatedInstallationPlannerTest {
         assertTrue(result.currentComponents.all {
             it.state == CurrentComponentState.OFFICIAL_ARTIFACT_MATCH
         })
+        assertTrue(result.selectedArtifacts.all {
+            it.compatibilityStatus == CompatibilityValidationStatus.DEVICE_VERIFIED
+        })
         assertFalse(result.realInstallationAllowed)
     }
 
@@ -64,6 +70,9 @@ class SimulatedInstallationPlannerTest {
         assertTrue(result.selectedArtifacts.all {
             it.sourceAvailability == SourceAvailabilityStatus.AVAILABLE
         })
+        assertTrue(result.selectedArtifacts.all {
+            it.compatibilityStatus == CompatibilityValidationStatus.DEVICE_VERIFIED
+        })
         assertEquals(SimulationFlowStage.entries.size, result.stages.size)
     }
 
@@ -80,6 +89,42 @@ class SimulatedInstallationPlannerTest {
         assertEquals(1, result.installationOrder.size)
         assertEquals(VENDING_PACKAGE, result.installationOrder.single().packageName)
         assertEquals(SimulatedInstallAction.INSTALL, result.installationOrder.single().action)
+    }
+
+    @Test
+    fun `missing GmsCore plans only GmsCore for exact verified profile`() {
+        val result = planner.create(
+            harmonyEnvironment(),
+            comparisons(
+                fingerprints = listOf(missing(GMS_PACKAGE), official(VENDING_PACKAGE)),
+                actualHashes = mapOf(
+                    VENDING_PACKAGE to OFFICIAL_HASHES.getValue(VENDING_PACKAGE),
+                ),
+            ),
+        )
+
+        assertEquals(1, result.installationOrder.size)
+        assertEquals(GMS_PACKAGE, result.installationOrder.single().packageName)
+        assertEquals(SimulatedInstallAction.INSTALL, result.installationOrder.single().action)
+    }
+
+    @Test
+    fun `HarmonyOS 4_3 and similar model stay outside verified installation gate`() {
+        val nonExactEnvironments = listOf(
+            harmonyEnvironment(romVersion = "4.3"),
+            harmonyEnvironment(model = "HBN-AL80-SIMILAR"),
+        )
+
+        nonExactEnvironments.forEach { environment ->
+            val simulated = planner.create(
+                environment,
+                comparisons(listOf(missing(GMS_PACKAGE), missing(VENDING_PACKAGE))),
+            )
+            val session = InstallationExecutionGate(catalog).evaluate(simulated)
+            assertTrue(
+                InstallationBlockReason.COMPATIBILITY_NOT_DEVICE_VERIFIED in session.blockReasons,
+            )
+        }
     }
 
     @Test
@@ -190,7 +235,7 @@ class SimulatedInstallationPlannerTest {
         context = ComponentMatchContext(
             manufacturer = "HUAWEI",
             romFamily = RomFamily.HARMONY_OS,
-            romVersion = "4.2",
+            romVersion = "4.2.0",
         ),
         actualArtifactSha256ByPackage = actualHashes,
     )
@@ -222,9 +267,13 @@ class SimulatedInstallationPlannerTest {
         readStatus = ComponentFingerprintReadStatus.NOT_INSTALLED,
     )
 
-    private fun harmonyEnvironment() = environment(
+    private fun harmonyEnvironment(
+        romVersion: String = "4.2.0",
+        model: String = "HBN-AL80",
+    ) = environment(
         romFamily = RomFamily.HARMONY_OS,
-        romVersion = "4.2",
+        romVersion = romVersion,
+        model = model,
         category = DeviceCategory.HUAWEI_HARMONY_ANDROID_COMPAT,
         planId = CompatibilityPlanId.HUAWEI_MICROG_COMPAT_PLAN,
         planStatus = CompatibilityPlanStatus.CONFIGURATION_REQUIRED,
@@ -233,6 +282,7 @@ class SimulatedInstallationPlannerTest {
     private fun harmony5Environment() = environment(
         romFamily = RomFamily.HARMONY_OS_5_PLUS,
         romVersion = "5.1",
+        model = "HBN-AL80",
         category = DeviceCategory.HARMONYOS_5_PLUS,
         planId = CompatibilityPlanId.UNSUPPORTED_OR_UNKNOWN,
         planStatus = CompatibilityPlanStatus.UNSUPPORTED,
@@ -241,6 +291,7 @@ class SimulatedInstallationPlannerTest {
     private fun environment(
         romFamily: RomFamily,
         romVersion: String,
+        model: String,
         category: DeviceCategory,
         planId: CompatibilityPlanId,
         planStatus: CompatibilityPlanStatus,
@@ -250,7 +301,7 @@ class SimulatedInstallationPlannerTest {
         device = DeviceIdentity(
             brand = "HUAWEI",
             manufacturer = "HUAWEI",
-            model = "Huawei Pura 70 Pro+",
+            model = model,
             product = "HBN-AL80",
             device = "HWHBN",
             hardware = "unknown",

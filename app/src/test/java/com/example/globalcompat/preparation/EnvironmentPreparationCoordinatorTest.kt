@@ -157,6 +157,16 @@ class EnvironmentPreparationCoordinatorTest {
         assertFalse(result.installationAllowed)
     }
 
+    @Test
+    fun `exact verified HBN profile unlocks installation eligibility after preparation`() {
+        val fixture = fixture()
+
+        val result = fixture.coordinator.prepare(EXACT_VERIFIED_REQUEST)
+
+        assertEquals(EnvironmentPreparationStatus.DOWNLOAD_VERIFIED_READY, result.status)
+        assertTrue(result.installationAllowed)
+    }
+
     private fun fixture(
         mode: DownloadMode = DownloadMode.NORMAL,
         catalogStatus: CatalogUpdateStatus = CatalogUpdateStatus.REMOTE_VERIFIED,
@@ -279,7 +289,13 @@ class EnvironmentPreparationCoordinatorTest {
         val HARMONY_42_REQUEST = EnvironmentPreparationRequest(
             deviceCategory = DeviceCategory.HUAWEI_HARMONY_ANDROID_COMPAT,
             planId = CompatibilityPlanId.HUAWEI_MICROG_COMPAT_PLAN,
+            deviceModel = "Huawei Pura 70 Pro+",
             systemVersion = "4.2",
+            androidApiLevel = 31,
+        )
+        val EXACT_VERIFIED_REQUEST = HARMONY_42_REQUEST.copy(
+            deviceModel = "HBN-AL80",
+            systemVersion = "4.2.0",
         )
     }
 }

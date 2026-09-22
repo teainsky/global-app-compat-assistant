@@ -29,5 +29,5 @@ object BuiltInComponentCatalog {
     private const val CATALOG_RESOURCE_PATH = "/compatibility-catalog.json"
     private const val SIGNATURE_RESOURCE_PATH = "/compatibility-catalog.sig"
     private const val PINNED_PUBLIC_KEY_BASE64 =
-        "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE4dJXoVNC5VSIbZS7cKzImSB9lNofQmvVDvwWcIh0WLLGThDASLxj5FhFGAVCPUHqBbC6XU0uVczLDcqoWXGwRw=="
+        "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEul7T6JFpbnOtO1phS6oFcZeCYqD4RMHrOz/PeHzxdhO9OmfVpT148QBopPpPhdyJrbsNY+q2NDxnmTuuNMpI7w=="
 }

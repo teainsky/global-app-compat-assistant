@@ -2,9 +2,13 @@ package com.example.globalcompat.installation
 
 import com.example.globalcompat.catalog.ArtifactSourceRecord
 import com.example.globalcompat.catalog.BuiltInComponentCatalog
+import com.example.globalcompat.catalog.CatalogMatchRequest
+import com.example.globalcompat.catalog.CatalogSelection
+import com.example.globalcompat.catalog.CatalogSystemFamily
 import com.example.globalcompat.catalog.ComponentArtifact
 import com.example.globalcompat.catalog.ComponentCatalog
 import com.example.globalcompat.catalog.ComponentRelease
+import com.example.globalcompat.catalog.TrustedComponentCatalogMatcher
 import com.example.globalcompat.data.CompatibilityPlanId
 import com.example.globalcompat.data.DeviceCategory
 import com.example.globalcompat.simulation.CurrentComponentState
@@ -68,10 +72,12 @@ class InstallationExecutionGate(
         }
 
         val simulationBlock = simulationBlockReason(simulatedPlan)
+        val catalogSelection = selectCatalog(simulatedPlan)
         if (simulationBlock != null) {
             return blockedPlan(
                 simulatedPlan = simulatedPlan,
-                reasons = listOf(simulationBlock) + compatibilityBlockReasons(simulatedPlan),
+                reasons = listOf(simulationBlock) +
+                    compatibilityBlockReasons(simulatedPlan, catalogSelection),
             )
         }
 
@@ -93,6 +99,7 @@ class InstallationExecutionGate(
                     selectedArtifact = selectedArtifact,
                     installation = installation,
                     verification = verificationResults[selectedArtifact.componentId],
+                    compatibleReleases = catalogSelection.compatibleReleases,
                 )
                 else -> blockedCurrentArtifactStep(selectedArtifact)
             }
@@ -152,8 +159,9 @@ class InstallationExecutionGate(
         selectedArtifact: SimulatedArtifact,
         installation: SimulatedInstallationStep,
         verification: ArtifactVerificationResult?,
+        compatibleReleases: List<ComponentRelease>,
     ): InstallationSessionStep {
-        val matches = catalog.releases.flatMap { release ->
+        val matches = compatibleReleases.flatMap { release ->
             release.artifacts
                 .filter { it.componentId == selectedArtifact.componentId }
                 .map { release to it }
@@ -374,28 +382,37 @@ class InstallationExecutionGate(
 
     private fun compatibilityBlockReasons(
         simulatedPlan: SimulatedInstallationPlan,
+        selection: CatalogSelection,
     ): List<InstallationBlockReason> {
         val selectedIds = simulatedPlan.selectedArtifacts.map { it.componentId }.toSet()
         if (selectedIds.isEmpty()) return emptyList()
-        val matchingReleases = catalog.releases.filter { release ->
-            release.artifacts.any { it.componentId in selectedIds }
-        }
-        val isDeviceVerified = matchingReleases.size == 1 &&
-            matchingReleases.single().compatibilityStatus ==
+        val release = selection.recommendedRelease
+        val recommended = selection.recommendedArtifacts.filter { it.componentId in selectedIds }
+        val isDeviceVerified = release?.compatibilityStatus ==
             gatePolicy.requiredCompatibilityStatus &&
-            matchingReleases.single().artifacts
-                .filter { it.componentId in selectedIds }
-                .let { artifacts ->
-                    artifacts.size == selectedIds.size && artifacts.all {
-                        it.compatibilityStatus == gatePolicy.requiredCompatibilityStatus
-                    }
-                }
+            recommended.size == selectedIds.size &&
+            recommended.all {
+                it.compatibilityStatus == gatePolicy.requiredCompatibilityStatus
+            }
         return if (isDeviceVerified) {
             emptyList()
         } else {
             listOf(InstallationBlockReason.COMPATIBILITY_NOT_DEVICE_VERIFIED)
         }
     }
+
+    private fun selectCatalog(simulatedPlan: SimulatedInstallationPlan): CatalogSelection =
+        TrustedComponentCatalogMatcher().select(
+            catalog,
+            CatalogMatchRequest(
+                planId = simulatedPlan.compatibilityPlanId,
+                deviceCategory = simulatedPlan.deviceCategory,
+                deviceFamily = simulatedPlan.deviceModel,
+                systemFamily = CatalogSystemFamily.HUAWEI_HARMONY_OS,
+                systemVersion = simulatedPlan.systemVersion,
+                androidApiLevel = simulatedPlan.androidApiLevel,
+            ),
+        )
 
     private fun blockMessage(reasons: List<InstallationBlockReason>): String = when {
         InstallationBlockReason.HARMONYOS_5_PLUS_NOT_SUPPORTED in reasons ->

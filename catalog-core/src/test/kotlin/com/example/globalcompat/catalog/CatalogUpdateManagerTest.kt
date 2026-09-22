@@ -15,19 +15,20 @@ class CatalogUpdateManagerTest {
     private val signingKey = newKeyPair()
     private val store = MemoryCatalogStore()
     private val manager = manager(signingKey, store)
+    private val baseVersion = BuiltInComponentCatalog.catalog.catalogVersion
 
     @Test
     fun `correctly signed newer catalog is accepted`() {
-        val state = manager.refresh(source(signed(catalogVersion = 2)))
+        val state = manager.refresh(source(signed(catalogVersion = baseVersion + 1)))
 
         assertEquals(CatalogUpdateStatus.REMOTE_VERIFIED, state.status)
-        assertEquals(2L, state.activeCatalog.catalogVersion)
-        assertEquals(2L, manager.current().activeCatalog.catalogVersion)
+        assertEquals(baseVersion + 1, state.activeCatalog.catalogVersion)
+        assertEquals(baseVersion + 1, manager.current().activeCatalog.catalogVersion)
     }
 
     @Test
     fun `changing one JSON byte after signing is rejected`() {
-        val original = signed(catalogVersion = 2)
+        val original = signed(catalogVersion = baseVersion + 1)
         val tampered = original.catalogJson.copyOf().also { bytes ->
             val index = bytes.indexOfFirst { it == '2'.code.toByte() }
             bytes[index] = '3'.code.toByte()
@@ -36,48 +37,57 @@ class CatalogUpdateManagerTest {
         val state = manager.refresh(source(original.copy(catalogJson = tampered)))
 
         assertEquals(CatalogUpdateStatus.REMOTE_REJECTED, state.status)
-        assertEquals(1L, state.activeCatalog.catalogVersion)
+        assertEquals(baseVersion, state.activeCatalog.catalogVersion)
     }
 
     @Test
     fun `signature from a different key is rejected`() {
-        val state = manager.refresh(source(signed(catalogVersion = 2, keyPair = newKeyPair())))
+        val state = manager.refresh(
+            source(signed(catalogVersion = baseVersion + 1, keyPair = newKeyPair())),
+        )
 
         assertEquals(CatalogUpdateStatus.REMOTE_REJECTED, state.status)
-        assertEquals(1L, state.activeCatalog.catalogVersion)
+        assertEquals(baseVersion, state.activeCatalog.catalogVersion)
     }
 
     @Test
     fun `new unsupported schema is rejected`() {
         val state = manager.refresh(
-            source(signed(BuiltInComponentCatalog.catalog.copy(schemaVersion = 6, catalogVersion = 2))),
+            source(
+                signed(
+                    BuiltInComponentCatalog.catalog.copy(
+                        schemaVersion = 6,
+                        catalogVersion = baseVersion + 1,
+                    ),
+                ),
+            ),
         )
 
         assertEquals(CatalogUpdateStatus.SCHEMA_UNSUPPORTED, state.status)
-        assertEquals(1L, state.activeCatalog.catalogVersion)
+        assertEquals(baseVersion, state.activeCatalog.catalogVersion)
     }
 
     @Test
     fun `catalog downgrade is blocked`() {
         assertEquals(
             CatalogUpdateStatus.REMOTE_VERIFIED,
-            manager.refresh(source(signed(catalogVersion = 3))).status,
+            manager.refresh(source(signed(catalogVersion = baseVersion + 2))).status,
         )
 
-        val state = manager.refresh(source(signed(catalogVersion = 2)))
+        val state = manager.refresh(source(signed(catalogVersion = baseVersion + 1)))
 
         assertEquals(CatalogUpdateStatus.ROLLBACK_BLOCKED, state.status)
-        assertEquals(3L, state.activeCatalog.catalogVersion)
+        assertEquals(baseVersion + 2, state.activeCatalog.catalogVersion)
     }
 
     @Test
     fun `unsafe new rules retain the last trusted catalog`() {
         assertEquals(
             CatalogUpdateStatus.REMOTE_VERIFIED,
-            manager.refresh(source(signed(catalogVersion = 2))).status,
+            manager.refresh(source(signed(catalogVersion = baseVersion + 1))).status,
         )
         val unsafe = BuiltInComponentCatalog.catalog.copy(
-            catalogVersion = 3,
+            catalogVersion = baseVersion + 2,
             deviceRules = BuiltInComponentCatalog.catalog.deviceRules.map { rule ->
                 if (rule.ruleId == "harmonyos-version-5-plus-block") {
                     rule.copy(installWorkflowAllowed = true)
@@ -90,7 +100,7 @@ class CatalogUpdateManagerTest {
         val state = manager.refresh(source(signed(unsafe)))
 
         assertEquals(CatalogUpdateStatus.REMOTE_REJECTED, state.status)
-        assertEquals(2L, state.activeCatalog.catalogVersion)
+        assertEquals(baseVersion + 1, state.activeCatalog.catalogVersion)
         assertTrue(state.detail.contains("HarmonyOS 5+"))
     }
 
@@ -105,7 +115,7 @@ class CatalogUpdateManagerTest {
     @Test
     fun `HarmonyOS 5 plus legacy installation prohibition cannot be removed`() {
         val missingBlock = BuiltInComponentCatalog.catalog.copy(
-            catalogVersion = 2,
+            catalogVersion = baseVersion + 1,
             deviceRules = BuiltInComponentCatalog.catalog.deviceRules.filterNot {
                 it.ruleId == "harmonyos-next-family-block"
             },
@@ -120,7 +130,7 @@ class CatalogUpdateManagerTest {
     @Test
     fun `ordinary user feedback cannot create DEVICE_VERIFIED`() {
         val userPromotion = BuiltInComponentCatalog.catalog.copy(
-            catalogVersion = 2,
+            catalogVersion = baseVersion + 1,
             compatibilityRecords = BuiltInComponentCatalog.catalog.compatibilityRecords.mapIndexed { index, record ->
                 if (index == 0) {
                     record.copy(
@@ -140,12 +150,35 @@ class CatalogUpdateManagerTest {
     }
 
     @Test
+    fun `release wide DEVICE_VERIFIED cannot replace an exact device record`() {
+        val globalPromotion = BuiltInComponentCatalog.catalog.copy(
+            catalogVersion = baseVersion + 1,
+            compatibilityRecords = BuiltInComponentCatalog.catalog.compatibilityRecords.mapIndexed {
+                    index, record ->
+                if (index == 0) {
+                    record.copy(
+                        status = CompatibilityValidationStatus.DEVICE_VERIFIED,
+                        authority = CompatibilityEvidenceAuthority.TRUSTED_DEVICE_LAB,
+                    )
+                } else {
+                    record
+                }
+            },
+        )
+
+        val state = manager.refresh(source(signed(globalPromotion)))
+
+        assertEquals(CatalogUpdateStatus.REMOTE_REJECTED, state.status)
+        assertTrue(state.detail.contains("exact verified device record"))
+    }
+
+    @Test
     fun `higher min client version is rejected without replacing trusted catalog`() {
         val state = manager.refresh(
             source(
                 signed(
                     BuiltInComponentCatalog.catalog.copy(
-                        catalogVersion = 2,
+                        catalogVersion = baseVersion + 1,
                         minClientVersion = 2,
                     ),
                 ),
@@ -153,7 +186,7 @@ class CatalogUpdateManagerTest {
         )
 
         assertEquals(CatalogUpdateStatus.SCHEMA_UNSUPPORTED, state.status)
-        assertEquals(1L, state.activeCatalog.catalogVersion)
+        assertEquals(baseVersion, state.activeCatalog.catalogVersion)
     }
 
     private fun manager(

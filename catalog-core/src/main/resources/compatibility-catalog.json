@@ -1,50 +1,5 @@
 {
   "schemaVersion": 5,
-  "catalogVersion": 1,
-  "publishedAt": "2026-09-21T00:00:00+08:00",
-  "minClientVersion": 1,
-  "deviceRules": [
-    {
-      "ruleId": "harmonyos-next-family-block",
-      "manufacturers": ["HUAWEI"],
-      "romFamilies": ["HARMONY_OS_5_PLUS"],
-      "minSystemMajor": null,
-      "maxSystemMajor": null,
-      "deviceCategory": "HARMONYOS_5_PLUS",
-      "planId": "UNSUPPORTED_OR_UNKNOWN",
-      "installWorkflowAllowed": false
-    },
-    {
-      "ruleId": "harmonyos-version-5-plus-block",
-      "manufacturers": ["HUAWEI"],
-      "romFamilies": ["HARMONY_OS"],
-      "minSystemMajor": 5,
-      "maxSystemMajor": null,
-      "deviceCategory": "HARMONYOS_5_PLUS",
-      "planId": "UNSUPPORTED_OR_UNKNOWN",
-      "installWorkflowAllowed": false
-    },
-    {
-      "ruleId": "huawei-harmonyos-1-4",
-      "manufacturers": ["HUAWEI"],
-      "romFamilies": ["HARMONY_OS"],
-      "minSystemMajor": 1,
-      "maxSystemMajor": 4,
-      "deviceCategory": "HUAWEI_HARMONY_ANDROID_COMPAT",
-      "planId": "HUAWEI_MICROG_COMPAT_PLAN",
-      "installWorkflowAllowed": true
-    },
-    {
-      "ruleId": "china-android-rom-without-gms",
-      "manufacturers": [],
-      "romFamilies": ["HYPER_OS", "COLOR_OS", "ORIGIN_OS", "MAGIC_OS"],
-      "minSystemMajor": null,
-      "maxSystemMajor": null,
-      "deviceCategory": "CHINA_ANDROID_NO_GMS",
-      "planId": "GMS_REPAIR_REQUIRED",
-      "installWorkflowAllowed": false
-    }
-  ],
   "componentReleases": [
     {
       "releaseId": "microg-huawei-hw-v0.3.16.252432",
@@ -55,8 +10,13 @@
       "compatibility": {
         "requiredPlanId": "HUAWEI_MICROG_COMPAT_PLAN",
         "requiredDeviceCategory": "HUAWEI_HARMONY_ANDROID_COMPAT",
-        "allowedVariants": ["HUAWEI_HW"],
-        "supportedSystemFamilies": ["HUAWEI_EMUI", "HUAWEI_HARMONY_OS"],
+        "allowedVariants": [
+          "HUAWEI_HW"
+        ],
+        "supportedSystemFamilies": [
+          "HUAWEI_EMUI",
+          "HUAWEI_HARMONY_OS"
+        ],
         "minHarmonyOsMajor": 1,
         "maxHarmonyOsMajor": 4
       },
@@ -108,16 +68,121 @@
           "blockedSystemVersions": [],
           "integrityStatus": "SIGNATURE_VERIFIED",
           "compatibilityStatus": "UNTESTED",
-          "publishedAt": "2026-07-14T14:11:55Z",
-          "license": null
+          "publishedAt": "2026-07-14T14:11:55Z"
         }
       ]
+    }
+  ],
+  "verificationPolicy": {
+    "allowedSourceTypes": [
+      "OFFICIAL_MICROG_GITHUB",
+      "OFFICIAL_MICROG_DOWNLOAD_PAGE",
+      "OFFICIAL_HUAWEI_APPGALLERY"
+    ],
+    "recommendableCompatibilityStatuses": [
+      "DEVICE_VERIFIED"
+    ],
+    "installableIntegrityStatuses": [
+      "SIGNATURE_VERIFIED"
+    ],
+    "newReleaseDefaultCompatibilityStatus": "CANDIDATE",
+    "newArtifactDefaultCompatibilityStatus": "UNTESTED",
+    "requiredVariantByPlan": {
+      "HUAWEI_MICROG_COMPAT_PLAN": "HUAWEI_HW"
+    },
+    "requireSha256ForDownloadVerification": true,
+    "requireSigningCertificateForDownloadVerification": true
+  },
+  "sourceRecords": [
+    {
+      "componentId": "microg_services_huawei_compatible",
+      "sourceType": "OFFICIAL_MICROG_GITHUB",
+      "availabilityStatus": "AVAILABLE",
+      "sourcePageUrl": "https://github.com/microg/GmsCore/releases/tag/v0.3.16.252432",
+      "downloadUrl": "https://github.com/microg/GmsCore/releases/download/v0.3.16.252432/com.google.android.gms-252432032-hw.apk",
+      "sourceAssetId": 476760666,
+      "observedFilename": "com.google.android.gms-252432032-hw.apk",
+      "sourceDigest": "sha256:a44ce933e2336d3340eb82ad3bb28bba03bc56a7b3cf3c98250a225c55b572de",
+      "evidence": [
+        "Task 004.3 official GitHub asset audit PASS"
+      ],
+      "warningCodes": []
+    },
+    {
+      "componentId": "microg_companion_huawei_compatible",
+      "sourceType": "OFFICIAL_MICROG_GITHUB",
+      "availabilityStatus": "AVAILABLE",
+      "sourcePageUrl": "https://github.com/microg/GmsCore/releases/tag/v0.3.16.252432",
+      "downloadUrl": "https://github.com/microg/GmsCore/releases/download/v0.3.16.252432/com.android.vending-84022632-hw.apk",
+      "sourceAssetId": 476761461,
+      "observedFilename": "com.android.vending-84022632-hw.apk",
+      "sourceDigest": "sha256:c1aa0c8854fcdac31d23d54e1ea62daedff6b7a6405a2f5ff5351c2dde8f113d",
+      "evidence": [
+        "Task 004.3 official GitHub asset audit PASS"
+      ],
+      "warningCodes": []
+    }
+  ],
+  "catalogVersion": 2,
+  "publishedAt": "2026-09-22T12:00:00+08:00",
+  "minClientVersion": 1,
+  "deviceRules": [
+    {
+      "ruleId": "harmonyos-next-family-block",
+      "manufacturers": [
+        "HUAWEI"
+      ],
+      "romFamilies": [
+        "HARMONY_OS_5_PLUS"
+      ],
+      "deviceCategory": "HARMONYOS_5_PLUS",
+      "planId": "UNSUPPORTED_OR_UNKNOWN",
+      "installWorkflowAllowed": false
+    },
+    {
+      "ruleId": "harmonyos-version-5-plus-block",
+      "manufacturers": [
+        "HUAWEI"
+      ],
+      "romFamilies": [
+        "HARMONY_OS"
+      ],
+      "minSystemMajor": 5,
+      "deviceCategory": "HARMONYOS_5_PLUS",
+      "planId": "UNSUPPORTED_OR_UNKNOWN",
+      "installWorkflowAllowed": false
+    },
+    {
+      "ruleId": "huawei-harmonyos-1-4",
+      "manufacturers": [
+        "HUAWEI"
+      ],
+      "romFamilies": [
+        "HARMONY_OS"
+      ],
+      "minSystemMajor": 1,
+      "maxSystemMajor": 4,
+      "deviceCategory": "HUAWEI_HARMONY_ANDROID_COMPAT",
+      "planId": "HUAWEI_MICROG_COMPAT_PLAN",
+      "installWorkflowAllowed": true
+    },
+    {
+      "ruleId": "china-android-rom-without-gms",
+      "manufacturers": [],
+      "romFamilies": [
+        "HYPER_OS",
+        "COLOR_OS",
+        "ORIGIN_OS",
+        "MAGIC_OS"
+      ],
+      "deviceCategory": "CHINA_ANDROID_NO_GMS",
+      "planId": "GMS_REPAIR_REQUIRED",
+      "installWorkflowAllowed": false
     }
   ],
   "compatibilityRecords": [
     {
       "releaseId": "microg-huawei-hw-v0.3.16.252432",
-      "componentId": null,
       "status": "CANDIDATE",
       "authority": "MAINTAINER_SIGNED",
       "verifiedDeviceFamilies": [],
@@ -140,59 +205,43 @@
       "verifiedSystemVersions": []
     }
   ],
+  "verifiedDeviceRecords": [
+    {
+      "schemaVersion": 1,
+      "deviceModel": "HBN-AL80",
+      "deviceFamily": "HBN-AL80",
+      "romFamily": "HARMONY_OS",
+      "harmonyOsVersion": "4.2.0",
+      "androidApiLevel": 31,
+      "componentRelease": "v0.3.16.252432",
+      "componentVersionCodes": {
+        "com.android.vending": "84022632",
+        "com.google.android.gms": "252432032"
+      },
+      "componentSignerDigests": {
+        "com.android.vending": [
+          "9bd06727e62796c0130eb6dab39b73157451582cbd138e86c468acc395d14165"
+        ],
+        "com.google.android.gms": [
+          "9bd06727e62796c0130eb6dab39b73157451582cbd138e86c468acc395d14165"
+        ]
+      },
+      "validationDate": "2026-09-21T09:33:40.585561200Z",
+      "evidenceDigest": "6ec525d9dd5e17a3f71aca79a08bc77d1f6a884cf254b94d92ede17a565a6315",
+      "compatibilityStatus": "DEVICE_VERIFIED"
+    }
+  ],
   "blockedVersions": [],
   "warnings": [
     {
-      "code": "COMPATIBILITY_NOT_DEVICE_VERIFIED",
-      "message": "Artifact integrity is audited; Huawei device compatibility remains untested."
-    }
-  ],
-  "verificationPolicy": {
-    "allowedSourceTypes": [
-      "OFFICIAL_MICROG_GITHUB",
-      "OFFICIAL_MICROG_DOWNLOAD_PAGE",
-      "OFFICIAL_HUAWEI_APPGALLERY"
-    ],
-    "recommendableCompatibilityStatuses": ["DEVICE_VERIFIED"],
-    "installableIntegrityStatuses": ["SIGNATURE_VERIFIED"],
-    "newReleaseDefaultCompatibilityStatus": "CANDIDATE",
-    "newArtifactDefaultCompatibilityStatus": "UNTESTED",
-    "requiredVariantByPlan": {
-      "HUAWEI_MICROG_COMPAT_PLAN": "HUAWEI_HW"
-    },
-    "requireSha256ForDownloadVerification": true,
-    "requireSigningCertificateForDownloadVerification": true
-  },
-  "sourceRecords": [
-    {
-      "componentId": "microg_services_huawei_compatible",
-      "sourceType": "OFFICIAL_MICROG_GITHUB",
-      "availabilityStatus": "AVAILABLE",
-      "sourcePageUrl": "https://github.com/microg/GmsCore/releases/tag/v0.3.16.252432",
-      "downloadUrl": "https://github.com/microg/GmsCore/releases/download/v0.3.16.252432/com.google.android.gms-252432032-hw.apk",
-      "sourceAssetId": 476760666,
-      "observedFilename": "com.google.android.gms-252432032-hw.apk",
-      "expectedSize": null,
-      "sourceDigest": "sha256:a44ce933e2336d3340eb82ad3bb28bba03bc56a7b3cf3c98250a225c55b572de",
-      "evidence": ["Task 004.3 official GitHub asset audit PASS"],
-      "warningCodes": []
-    },
-    {
-      "componentId": "microg_companion_huawei_compatible",
-      "sourceType": "OFFICIAL_MICROG_GITHUB",
-      "availabilityStatus": "AVAILABLE",
-      "sourcePageUrl": "https://github.com/microg/GmsCore/releases/tag/v0.3.16.252432",
-      "downloadUrl": "https://github.com/microg/GmsCore/releases/download/v0.3.16.252432/com.android.vending-84022632-hw.apk",
-      "sourceAssetId": 476761461,
-      "observedFilename": "com.android.vending-84022632-hw.apk",
-      "expectedSize": null,
-      "sourceDigest": "sha256:c1aa0c8854fcdac31d23d54e1ea62daedff6b7a6405a2f5ff5351c2dde8f113d",
-      "evidence": ["Task 004.3 official GitHub asset audit PASS"],
-      "warningCodes": []
+      "code": "DEVICE_VERIFICATION_EXACT_PROFILE_ONLY",
+      "message": "DEVICE_VERIFIED applies only to exact signed device records; no model or system inheritance is allowed."
     }
   ],
   "installationGatePolicy": {
-    "allowedDeviceCategories": ["HUAWEI_HARMONY_ANDROID_COMPAT"],
+    "allowedDeviceCategories": [
+      "HUAWEI_HARMONY_ANDROID_COMPAT"
+    ],
     "requiredSourceAvailability": "AVAILABLE",
     "requiredIntegrityStatus": "SIGNATURE_VERIFIED",
     "requiredCompatibilityStatus": "DEVICE_VERIFIED",

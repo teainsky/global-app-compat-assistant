@@ -21,6 +21,7 @@ class CatalogSchemaValidator(
             if (catalog.publishedAt.isBlank()) add("publishedAt is required")
             validateDeviceRules(catalog.deviceRules, this)
             validateCompatibilityRecords(catalog, this)
+            validateVerifiedDeviceRecords(catalog, this)
             validateArtifacts(catalog, this)
             validateInstallationGate(catalog.installationGatePolicy, this)
         }
@@ -81,6 +82,9 @@ class CatalogSchemaValidator(
             ) {
                 errors += "DEVICE_VERIFIED requires trusted device-lab evidence"
             }
+            if (record.status == CompatibilityValidationStatus.DEVICE_VERIFIED) {
+                errors += "DEVICE_VERIFIED must use an exact verified device record"
+            }
         }
         catalog.releases.forEach { release ->
             if ((release.releaseId to null) !in recordKeys) {
@@ -126,6 +130,85 @@ class CatalogSchemaValidator(
         }
     }
 
+    private fun validateVerifiedDeviceRecords(
+        catalog: ComponentCatalog,
+        errors: MutableList<String>,
+    ) {
+        val keys = catalog.verifiedDeviceRecords.map {
+            listOf(
+                it.deviceModel,
+                it.deviceFamily,
+                it.romFamily,
+                it.harmonyOsVersion,
+                it.androidApiLevel.toString(),
+                it.componentRelease,
+            )
+        }
+        if (keys.toSet().size != keys.size) {
+            errors += "verified device record exact-profile keys must be unique"
+        }
+        catalog.verifiedDeviceRecords.forEach { record ->
+            if (record.schemaVersion != VERIFIED_DEVICE_RECORD_SCHEMA_VERSION ||
+                record.deviceModel.isBlank() ||
+                record.deviceFamily != record.deviceModel ||
+                record.romFamily != HARMONY_OS_ROM_FAMILY ||
+                record.androidApiLevel <= 0 ||
+                record.validationDate.isBlank() ||
+                !record.evidenceDigest.isSha256() ||
+                record.compatibilityStatus != CompatibilityValidationStatus.DEVICE_VERIFIED
+            ) {
+                errors += "verified device record metadata is invalid"
+                return@forEach
+            }
+            val harmonyMajor = VERSION_NUMBER.find(record.harmonyOsVersion)?.value?.toIntOrNull()
+            if (harmonyMajor == null || harmonyMajor !in 1 until HARMONY_OS_5_MAJOR) {
+                errors += "verified device record cannot authorize HarmonyOS 5+"
+            }
+            val release = catalog.releases.singleOrNull {
+                it.releaseTag == record.componentRelease
+            }
+            if (release == null) {
+                errors += "verified device record references an unknown release"
+                return@forEach
+            }
+            val expectedVersions = release.artifacts.associate {
+                it.packageName to it.artifactVersionCode.orEmpty()
+            }
+            val expectedSigners = release.artifacts.associate { artifact ->
+                artifact.packageName to listOfNotNull(
+                    artifact.signingCertificateDigest?.normalizeDigest(),
+                )
+            }
+            val actualSigners = record.componentSignerDigests.mapValues { (_, digests) ->
+                digests.map { it.normalizeDigest() }.sorted()
+            }
+            if (record.componentVersionCodes != expectedVersions ||
+                actualSigners != expectedSigners.mapValues { (_, digests) -> digests.sorted() }
+            ) {
+                errors += "verified device record components do not match the audited release"
+            }
+            if (release.compatibilityStatus in setOf(
+                    CompatibilityValidationStatus.BLOCKED,
+                    CompatibilityValidationStatus.DEPRECATED,
+                ) || release.artifacts.any { artifact ->
+                    artifact.integrityStatus != ArtifactIntegrityStatus.SIGNATURE_VERIFIED ||
+                        artifact.compatibilityStatus in setOf(
+                            CompatibilityValidationStatus.BLOCKED,
+                            CompatibilityValidationStatus.DEPRECATED,
+                        ) ||
+                        catalog.blockedVersions.any { rule ->
+                            rule.componentId == artifact.componentId &&
+                                (artifact.releaseVersion in rule.versions ||
+                                    artifact.artifactVersionCode in rule.versions ||
+                                    artifact.artifactVersionName in rule.versions)
+                        }
+                }
+            ) {
+                errors += "verified device record references blocked or unaudited components"
+            }
+        }
+    }
+
     private fun validateInstallationGate(
         gate: InstallationGatePolicy,
         errors: MutableList<String>,
@@ -151,8 +234,13 @@ class CatalogSchemaValidator(
     private fun String?.isSha256(): Boolean =
         this != null && SHA256.matches(replace(":", "").lowercase())
 
+    private fun String.normalizeDigest(): String = replace(":", "").lowercase()
+
     private companion object {
         const val HARMONY_OS_5_MAJOR = 5
+        const val HARMONY_OS_ROM_FAMILY = "HARMONY_OS"
+        const val VERIFIED_DEVICE_RECORD_SCHEMA_VERSION = 1
         val SHA256 = Regex("[0-9a-f]{64}")
+        val VERSION_NUMBER = Regex("\\d+")
     }
 }

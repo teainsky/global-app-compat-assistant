@@ -37,6 +37,44 @@ class TrustedComponentCatalogMatcherTest {
     }
 
     @Test
+    fun `signed exact HBN AL80 profile elevates only its audited release`() {
+        val selection = matcher.select(builtIn, exactVerifiedRequest())
+
+        assertEquals("HBN-AL80", builtIn.verifiedDeviceRecords.single().deviceModel)
+        assertEquals(
+            "6ec525d9dd5e17a3f71aca79a08bc77d1f6a884cf254b94d92ede17a565a6315",
+            builtIn.verifiedDeviceRecords.single().evidenceDigest,
+        )
+        assertEquals(
+            CompatibilityValidationStatus.DEVICE_VERIFIED,
+            selection.recommendedRelease?.compatibilityStatus,
+        )
+        assertEquals(2, selection.recommendedArtifacts.size)
+        assertEquals(2, selection.installableArtifacts.size)
+        assertTrue(selection.installableArtifacts.all {
+            it.compatibilityStatus == CompatibilityValidationStatus.DEVICE_VERIFIED
+        })
+    }
+
+    @Test
+    fun `signed exact profile never generalizes by version model or API`() {
+        val nonExactRequests = listOf(
+            exactVerifiedRequest().copy(systemVersion = "4.3"),
+            exactVerifiedRequest().copy(deviceFamily = "HBN-AL80-SIMILAR"),
+            exactVerifiedRequest().copy(androidApiLevel = 32),
+        )
+
+        nonExactRequests.forEach { request ->
+            val selection = matcher.select(builtIn, request)
+            assertNull(selection.recommendedRelease)
+            assertTrue(selection.installableArtifacts.isEmpty())
+            assertTrue(selection.compatibleArtifacts.all {
+                it.compatibilityStatus != CompatibilityValidationStatus.DEVICE_VERIFIED
+            })
+        }
+    }
+
+    @Test
     fun `Huawei plan cannot match ordinary custom ROM microG artifacts`() {
         val customRomRelease = candidateRelease().copy(
             releaseId = "custom-rom-build",
@@ -367,6 +405,13 @@ class TrustedComponentCatalogMatcherTest {
         deviceFamily = PURA_70_PRO_PLUS,
         systemFamily = CatalogSystemFamily.HUAWEI_HARMONY_OS,
         systemVersion = "4.2",
+        androidApiLevel = 31,
+    )
+
+    private fun exactVerifiedRequest() = huaweiRequest().copy(
+        deviceFamily = "HBN-AL80",
+        systemVersion = "4.2.0",
+        androidApiLevel = 31,
     )
 
     private companion object {

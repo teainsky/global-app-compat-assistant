@@ -95,6 +95,7 @@ class SimulatedInstallationPlanner(
                 deviceFamily = environment.device.model,
                 systemFamily = CatalogSystemFamily.HUAWEI_HARMONY_OS,
                 systemVersion = environment.rom.version.orEmpty(),
+                androidApiLevel = environment.android.apiLevel,
             ),
         )
         val release = selection.compatibleReleases.singleOrNull()
@@ -409,6 +410,9 @@ class SimulatedInstallationPlanner(
         status = status,
         deviceCategory = environment.compatibilityPlan.deviceCategory,
         compatibilityPlanId = environment.compatibilityPlan.planId,
+        deviceModel = environment.device.model,
+        systemVersion = environment.rom.version.orEmpty(),
+        androidApiLevel = environment.android.apiLevel,
         selectedReleaseTag = release?.releaseTag,
         selectedArtifacts = selectedArtifacts,
         currentComponents = currentComponents,
