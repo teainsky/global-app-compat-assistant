@@ -360,7 +360,22 @@ private fun EnvironmentReportView(
             ReportSection("全球设备画像") {
                 ReportRow("平台", report.deviceProfile.platformFamily.name)
                 ReportRow("市场版本", report.deviceProfile.marketVariant.name)
-                ReportRow("Google 环境", report.deviceProfile.googleEnvironment.name)
+                ReportRow(
+                    "Google 组件集合",
+                    report.deviceProfile.googleEnvironmentAssessment.componentSetState.name,
+                )
+                ReportRow(
+                    "组件可信度",
+                    report.deviceProfile.googleEnvironmentAssessment.componentTrust.name,
+                )
+                ReportRow(
+                    "功能健康",
+                    report.deviceProfile.googleEnvironmentAssessment.functionalHealth.name,
+                )
+                ReportRow(
+                    "Play 认证",
+                    report.deviceProfile.googleEnvironmentAssessment.playCertification.name,
+                )
                 ReportRow("安装能力", report.deviceProfile.installationCapability.name)
                 ReportRow("验证等级", report.deviceProfile.validationLevel.name)
             }
@@ -650,7 +665,7 @@ private fun Long.userFileSize(): String = when {
 private fun CompatibilityDecisionCard(decision: CompatibilityDecision) {
     var showTechnicalEvidence by remember(decision) { mutableStateOf(false) }
     val userMessage = when (decision.decisionStatus) {
-        CompatibilityDecisionStatus.NO_ACTION_REQUIRED -> "Google 运行环境正常，无需处理"
+        CompatibilityDecisionStatus.NO_ACTION_REQUIRED -> "当前已验证组件状态无需处理"
         CompatibilityDecisionStatus.VERIFIED_WORKFLOW_AVAILABLE -> "已有可信方案，可以准备环境"
         CompatibilityDecisionStatus.DIAGNOSTIC_ONLY -> "检测到环境问题，当前仅提供诊断"
         CompatibilityDecisionStatus.CURRENT_WORKFLOW_NOT_APPLICABLE ->
@@ -672,7 +687,22 @@ private fun CompatibilityDecisionCard(decision: CompatibilityDecision) {
         if (showTechnicalEvidence) {
             ReportRow("决策", decision.decisionStatus.name)
             ReportRow("验证等级", decision.validationLevel.name)
-            ReportRow("Google 环境", decision.googleEnvironment.name)
+            ReportRow(
+                "Google 组件集合",
+                decision.googleEnvironmentAssessment.componentSetState.name,
+            )
+            ReportRow(
+                "组件可信度",
+                decision.googleEnvironmentAssessment.componentTrust.name,
+            )
+            ReportRow(
+                "功能健康",
+                decision.googleEnvironmentAssessment.functionalHealth.name,
+            )
+            ReportRow(
+                "Play 认证",
+                decision.googleEnvironmentAssessment.playCertification.name,
+            )
             ReportRow("适用工作流", decision.applicableWorkflow.name)
             ReportRow("置信度", decision.confidence.name)
             decision.evidence.forEach { evidence ->
@@ -695,7 +725,7 @@ private fun CompatibilityDecisionCard(decision: CompatibilityDecision) {
 private fun CompatibilityPlanCard(plan: CompatibilityPlan) {
     var showTechnicalEvidence by remember(plan) { mutableStateOf(false) }
     val userMessage = when (plan.planId) {
-        CompatibilityPlanId.NO_ACTION_REQUIRED -> "Google 环境已完整，无需处理"
+        CompatibilityPlanId.NO_ACTION_REQUIRED -> "当前已验证组件状态无需处理"
         CompatibilityPlanId.HUAWEI_MICROG_COMPAT_PLAN -> "当前设备需要配置兼容环境"
         CompatibilityPlanId.GMS_REPAIR_REQUIRED -> "Google 环境不完整，需要修复"
         CompatibilityPlanId.UNSUPPORTED_OR_UNKNOWN -> if (

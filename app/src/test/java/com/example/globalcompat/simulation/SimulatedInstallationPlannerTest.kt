@@ -18,18 +18,22 @@ import com.example.globalcompat.data.CompatibilityNextAction
 import com.example.globalcompat.data.CompatibilityPlan
 import com.example.globalcompat.data.CompatibilityPlanId
 import com.example.globalcompat.data.CompatibilityPlanStatus
+import com.example.globalcompat.data.ComponentTrust
 import com.example.globalcompat.data.DetectionConfidence
 import com.example.globalcompat.data.DeviceCategory
 import com.example.globalcompat.data.DeviceIdentity
 import com.example.globalcompat.data.DeviceProfile
 import com.example.globalcompat.data.EnvironmentReport
 import com.example.globalcompat.data.GlobalValidationLevel
-import com.example.globalcompat.data.GoogleEnvironment
 import com.example.globalcompat.data.GoogleCompatibilityLayerStatus
+import com.example.globalcompat.data.GoogleComponentSetState
+import com.example.globalcompat.data.GoogleEnvironmentAssessment
+import com.example.globalcompat.data.FunctionalHealth
 import com.example.globalcompat.data.InstallationCapability
 import com.example.globalcompat.data.MarketVariant
 import com.example.globalcompat.data.OsFamily
 import com.example.globalcompat.data.PlatformFamily
+import com.example.globalcompat.data.PlayCertification
 import com.example.globalcompat.data.RomFamily
 import com.example.globalcompat.data.RomIdentification
 import com.example.globalcompat.installation.InstallationBlockReason
@@ -360,7 +364,13 @@ class SimulatedInstallationPlannerTest {
             androidApiLevel = 31,
             romFamily = romFamily,
             romVersion = romVersion,
-            googleEnvironment = GoogleEnvironment.GMS_ABSENT,
+            googleEnvironmentAssessment = GoogleEnvironmentAssessment(
+                componentSetState = GoogleComponentSetState.ABSENT,
+                componentTrust = ComponentTrust.UNKNOWN,
+                functionalHealth = FunctionalHealth.UNTESTED,
+                playCertification = PlayCertification.UNKNOWN,
+                evidence = emptyList(),
+            ),
             installationCapability = if (romFamily == RomFamily.HARMONY_OS_5_PLUS) {
                 InstallationCapability.NOT_APPLICABLE
             } else {
@@ -388,7 +398,13 @@ class SimulatedInstallationPlannerTest {
             } else {
                 GlobalValidationLevel.PROBABLE
             },
-            googleEnvironment = GoogleEnvironment.GMS_ABSENT,
+            googleEnvironmentAssessment = GoogleEnvironmentAssessment(
+                componentSetState = GoogleComponentSetState.ABSENT,
+                componentTrust = ComponentTrust.UNKNOWN,
+                functionalHealth = FunctionalHealth.UNTESTED,
+                playCertification = PlayCertification.UNKNOWN,
+                evidence = emptyList(),
+            ),
             applicableWorkflow = if (model == "HBN-AL80" && romVersion == "4.2.0") {
                 ApplicableWorkflow.HUAWEI_MICROG_COMPAT
             } else {

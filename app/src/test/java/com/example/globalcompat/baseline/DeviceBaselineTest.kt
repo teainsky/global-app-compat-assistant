@@ -15,18 +15,22 @@ import com.example.globalcompat.data.CompatibilityDecision
 import com.example.globalcompat.data.CompatibilityDecisionStatus
 import com.example.globalcompat.data.CompatibilityNextAction
 import com.example.globalcompat.data.CompatibilityLayerAssessment
+import com.example.globalcompat.data.ComponentTrust
 import com.example.globalcompat.data.DetectionConfidence
 import com.example.globalcompat.data.DeviceCategory
 import com.example.globalcompat.data.DeviceIdentity
 import com.example.globalcompat.data.DeviceProfile
 import com.example.globalcompat.data.EnvironmentReport
 import com.example.globalcompat.data.GlobalValidationLevel
-import com.example.globalcompat.data.GoogleEnvironment
 import com.example.globalcompat.data.GoogleCompatibilityLayerStatus
+import com.example.globalcompat.data.GoogleComponentSetState
+import com.example.globalcompat.data.GoogleEnvironmentAssessment
+import com.example.globalcompat.data.FunctionalHealth
 import com.example.globalcompat.data.InstallationCapability
 import com.example.globalcompat.data.MarketVariant
 import com.example.globalcompat.data.OsFamily
 import com.example.globalcompat.data.PlatformFamily
+import com.example.globalcompat.data.PlayCertification
 import com.example.globalcompat.data.RomFamily
 import com.example.globalcompat.data.RomIdentification
 import com.example.globalcompat.validation.DeviceValidationEvidenceLevel
@@ -454,7 +458,13 @@ class DeviceBaselineTest {
             androidApiLevel = 31,
             romFamily = RomFamily.HARMONY_OS,
             romVersion = "4.2",
-            googleEnvironment = GoogleEnvironment.UNKNOWN,
+            googleEnvironmentAssessment = GoogleEnvironmentAssessment(
+                componentSetState = GoogleComponentSetState.UNKNOWN,
+                componentTrust = ComponentTrust.UNKNOWN,
+                functionalHealth = FunctionalHealth.UNKNOWN,
+                playCertification = PlayCertification.UNKNOWN,
+                evidence = emptyList(),
+            ),
             installationCapability = InstallationCapability.LEGACY_HARMONY_COMPATIBLE,
             validationLevel = GlobalValidationLevel.PROBABLE,
             evidence = emptyList(),
@@ -462,7 +472,13 @@ class DeviceBaselineTest {
         compatibilityDecision = CompatibilityDecision(
             decisionStatus = CompatibilityDecisionStatus.UNKNOWN,
             validationLevel = GlobalValidationLevel.PROBABLE,
-            googleEnvironment = GoogleEnvironment.UNKNOWN,
+            googleEnvironmentAssessment = GoogleEnvironmentAssessment(
+                componentSetState = GoogleComponentSetState.UNKNOWN,
+                componentTrust = ComponentTrust.UNKNOWN,
+                functionalHealth = FunctionalHealth.UNKNOWN,
+                playCertification = PlayCertification.UNKNOWN,
+                evidence = emptyList(),
+            ),
             applicableWorkflow = ApplicableWorkflow.NONE,
             confidence = DetectionConfidence.UNKNOWN,
             evidence = emptyList(),

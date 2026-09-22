@@ -37,7 +37,7 @@ data class DecisionMessage(
 data class CompatibilityDecision(
     val decisionStatus: CompatibilityDecisionStatus,
     val validationLevel: GlobalValidationLevel,
-    val googleEnvironment: GoogleEnvironment,
+    val googleEnvironmentAssessment: GoogleEnvironmentAssessment,
     val applicableWorkflow: ApplicableWorkflow,
     val confidence: DetectionConfidence,
     val evidence: List<DecisionEvidence>,

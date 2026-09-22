@@ -43,9 +43,18 @@ class GlobalDeviceProfileClassifierTest {
             components = googleComponents(present = true),
         )
 
-        assertEquals(GoogleEnvironment.GMS_COMPLETE, samsung.googleEnvironment)
+        assertEquals(
+            GoogleComponentSetState.COMPLETE,
+            samsung.googleEnvironmentAssessment.componentSetState,
+        )
+        assertEquals(ComponentTrust.UNVERIFIED, samsung.googleEnvironmentAssessment.componentTrust)
+        assertEquals(FunctionalHealth.UNTESTED, samsung.googleEnvironmentAssessment.functionalHealth)
+        assertEquals(PlayCertification.UNKNOWN, samsung.googleEnvironmentAssessment.playCertification)
         assertEquals(PlatformFamily.ANDROID_DERIVED, samsung.platformFamily)
-        assertEquals(GoogleEnvironment.GMS_COMPLETE, pixel.googleEnvironment)
+        assertEquals(
+            GoogleComponentSetState.COMPLETE,
+            pixel.googleEnvironmentAssessment.componentSetState,
+        )
         assertEquals(PlatformFamily.STANDARD_ANDROID, pixel.platformFamily)
     }
 
@@ -68,9 +77,45 @@ class GlobalDeviceProfileClassifierTest {
             components = googleComponents(present = true),
         )
 
-        assertEquals(GoogleEnvironment.GMS_ABSENT, china.googleEnvironment)
-        assertEquals(GoogleEnvironment.GMS_COMPLETE, global.googleEnvironment)
-        assertFalse(china.googleEnvironment == global.googleEnvironment)
+        assertEquals(
+            GoogleComponentSetState.ABSENT,
+            china.googleEnvironmentAssessment.componentSetState,
+        )
+        assertEquals(
+            GoogleComponentSetState.COMPLETE,
+            global.googleEnvironmentAssessment.componentSetState,
+        )
+        assertFalse(
+            china.googleEnvironmentAssessment.componentSetState ==
+                global.googleEnvironmentAssessment.componentSetState,
+        )
+    }
+
+    @Test
+    fun `HBN AL80 official pair receives catalog trust without inferring Play certification`() {
+        val profile = profile(
+            manufacturer = "HUAWEI",
+            brand = "HUAWEI",
+            model = "HBN-AL80",
+            romFamily = RomFamily.HARMONY_OS,
+            romVersion = "4.2.0",
+            apiLevel = 31,
+            components = googleComponents(present = true, officialVersions = true),
+        )
+
+        assertEquals(
+            GoogleComponentSetState.COMPLETE,
+            profile.googleEnvironmentAssessment.componentSetState,
+        )
+        assertEquals(ComponentTrust.TRUSTED, profile.googleEnvironmentAssessment.componentTrust)
+        assertEquals(
+            FunctionalHealth.USER_CONFIRMED,
+            profile.googleEnvironmentAssessment.functionalHealth,
+        )
+        assertEquals(
+            PlayCertification.UNKNOWN,
+            profile.googleEnvironmentAssessment.playCertification,
+        )
     }
 
     @Test
@@ -214,12 +259,19 @@ class GlobalDeviceProfileClassifierTest {
         return classifier.classify(device, android, rom, components, marketVariant)
     }
 
-    private fun googleComponents(present: Boolean): List<SystemComponent> = listOf(
-        component(ComponentId.GOOGLE_PLAY_SERVICES, present),
-        component(ComponentId.GOOGLE_PLAY_STORE, present),
+    private fun googleComponents(
+        present: Boolean,
+        officialVersions: Boolean = false,
+    ): List<SystemComponent> = listOf(
+        component(ComponentId.GOOGLE_PLAY_SERVICES, present, officialVersions),
+        component(ComponentId.GOOGLE_PLAY_STORE, present, officialVersions),
     )
 
-    private fun component(id: ComponentId, present: Boolean) = SystemComponent(
+    private fun component(
+        id: ComponentId,
+        present: Boolean,
+        officialVersions: Boolean,
+    ) = SystemComponent(
         id = id,
         displayName = id.name,
         packageName = if (id == ComponentId.GOOGLE_PLAY_SERVICES) {
@@ -230,6 +282,14 @@ class GlobalDeviceProfileClassifierTest {
         presence = if (present) ComponentPresence.PRESENT else ComponentPresence.NOT_INSTALLED,
         enabled = if (present) true else null,
         versionName = null,
-        versionCode = null,
+        versionCode = if (present && officialVersions) {
+            when (id) {
+                ComponentId.GOOGLE_PLAY_SERVICES -> 252432032L
+                ComponentId.GOOGLE_PLAY_STORE -> 84022632L
+                ComponentId.HMS_CORE -> null
+            }
+        } else {
+            null
+        },
     )
 }

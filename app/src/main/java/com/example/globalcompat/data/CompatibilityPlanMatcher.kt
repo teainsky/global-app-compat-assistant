@@ -32,7 +32,9 @@ class RuleBasedCompatibilityPlanMatcher(
                     observedValue = listOf(
                         context.deviceProfile.platformFamily,
                         context.deviceProfile.marketVariant,
-                        context.deviceProfile.googleEnvironment,
+                        context.deviceProfile.googleEnvironmentAssessment.componentSetState,
+                        context.deviceProfile.googleEnvironmentAssessment.componentTrust,
+                        context.deviceProfile.googleEnvironmentAssessment.functionalHealth,
                         context.deviceProfile.validationLevel,
                     ).joinToString(" / "),
                     description = "平台、市场版本、Google 环境与验证等级",
@@ -127,7 +129,9 @@ class RuleBasedCompatibilityPlanMatcher(
             )
         }
 
-        if (context.deviceProfile.googleEnvironment == GoogleEnvironment.GMS_COMPLETE) {
+        if (context.deviceProfile.googleEnvironmentAssessment
+                .isHealthyEnoughForNoAction(context.deviceProfile.validationLevel)
+        ) {
             return plan(
                 category = DeviceCategory.STANDARD_GMS,
                 planId = CompatibilityPlanId.NO_ACTION_REQUIRED,
@@ -136,14 +140,16 @@ class RuleBasedCompatibilityPlanMatcher(
                 warnings = listOf(
                     warning(
                         CompatibilityWarningCode.COMPONENT_HEALTH_NOT_VERIFIED,
-                        "仅确认 Play Services 与 Play Store 包存在且启用；未验证签名、运行健康、Play 认证或账号登录。",
+                        "当前无需处理不代表 Play 认证已验证，也不泛化为 Google 生态完全健康。",
                     ),
                 ),
                 confidence = DetectionConfidence.MEDIUM,
             )
         }
 
-        if (context.deviceProfile.googleEnvironment == GoogleEnvironment.GMS_PARTIAL) {
+        if (context.deviceProfile.googleEnvironmentAssessment.componentSetState ==
+            GoogleComponentSetState.PARTIAL
+        ) {
             val missingComponents = missingGoogleComponents(playServices, playStore)
             return plan(
                 category = DeviceCategory.PARTIAL_GMS,
@@ -162,7 +168,8 @@ class RuleBasedCompatibilityPlanMatcher(
             )
         }
 
-        if (context.deviceProfile.googleEnvironment == GoogleEnvironment.GMS_ABSENT &&
+        if (context.deviceProfile.googleEnvironmentAssessment.componentSetState ==
+            GoogleComponentSetState.ABSENT &&
             context.deviceProfile.marketVariant == MarketVariant.CHINA_MAINLAND &&
             matchedDeviceRule?.deviceCategory == DeviceCategory.CHINA_ANDROID_NO_GMS
         ) {
@@ -233,6 +240,16 @@ class RuleBasedCompatibilityPlanMatcher(
 
     private fun SystemComponent?.isPresentButDisabled(): Boolean =
         this?.presence == ComponentPresence.PRESENT && this.enabled != true
+
+    private fun GoogleEnvironmentAssessment.isHealthyEnoughForNoAction(
+        validationLevel: GlobalValidationLevel,
+    ): Boolean = componentSetState == GoogleComponentSetState.COMPLETE &&
+        componentTrust == ComponentTrust.TRUSTED &&
+        (
+            functionalHealth == FunctionalHealth.VERIFIED_HEALTHY ||
+                functionalHealth == FunctionalHealth.USER_CONFIRMED &&
+                validationLevel == GlobalValidationLevel.DEVICE_VERIFIED
+            )
 
     private fun componentEvidence(component: SystemComponent) = PlanEvidence(
         code = "COMPONENT_${component.id.name}",

@@ -65,7 +65,7 @@ class DeviceEnvironmentScanner(
         )
 
         return EnvironmentReport(
-            schemaVersion = 4,
+            schemaVersion = 5,
             scannedAtEpochMillis = clock(),
             device = device,
             android = android,

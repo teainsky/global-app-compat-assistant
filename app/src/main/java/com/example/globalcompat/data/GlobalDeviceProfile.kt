@@ -21,13 +21,42 @@ enum class OsFamily {
     UNKNOWN,
 }
 
-enum class GoogleEnvironment {
-    GMS_COMPLETE,
-    GMS_PARTIAL,
-    GMS_ABSENT,
-    COMPATIBILITY_LAYER,
+enum class GoogleComponentSetState {
+    COMPLETE,
+    PARTIAL,
+    ABSENT,
     UNKNOWN,
 }
+
+enum class ComponentTrust {
+    TRUSTED,
+    COMPATIBILITY_REPORTED,
+    UNVERIFIED,
+    MISMATCH,
+    UNKNOWN,
+}
+
+enum class FunctionalHealth {
+    VERIFIED_HEALTHY,
+    USER_CONFIRMED,
+    UNTESTED,
+    FAILED,
+    UNKNOWN,
+}
+
+enum class PlayCertification {
+    VERIFIED,
+    NOT_VERIFIED,
+    UNKNOWN,
+}
+
+data class GoogleEnvironmentAssessment(
+    val componentSetState: GoogleComponentSetState,
+    val componentTrust: ComponentTrust,
+    val functionalHealth: FunctionalHealth,
+    val playCertification: PlayCertification,
+    val evidence: List<DetectionEvidence>,
+)
 
 enum class InstallationCapability {
     USER_CONFIRMED_PACKAGE_INSTALL,
@@ -56,7 +85,7 @@ data class DeviceProfile(
     val androidApiLevel: Int,
     val romFamily: RomFamily,
     val romVersion: String?,
-    val googleEnvironment: GoogleEnvironment,
+    val googleEnvironmentAssessment: GoogleEnvironmentAssessment,
     val installationCapability: InstallationCapability,
     val validationLevel: GlobalValidationLevel,
     val evidence: List<DetectionEvidence>,

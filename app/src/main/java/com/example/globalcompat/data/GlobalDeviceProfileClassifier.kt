@@ -2,6 +2,7 @@ package com.example.globalcompat.data
 
 import com.example.globalcompat.catalog.BuiltInComponentCatalog
 import com.example.globalcompat.catalog.CatalogVerifiedDeviceCompatibilityRecord
+import com.example.globalcompat.catalog.CompatibilityValidationStatus
 
 class GlobalDeviceProfileClassifier(
     private val oemRegistry: OemBrandRegistry = OemBrandRegistry(),
@@ -19,14 +20,17 @@ class GlobalDeviceProfileClassifier(
     ): DeviceProfile {
         val oem = oemRegistry.resolve(device.manufacturer, device.brand)
         val platformFamily = platformFamily(rom)
-        val googleEnvironment = googleEnvironment(components, compatibilityLayerConfirmed)
+        val exactVerifiedRecord = exactVerifiedRecord(device, android, rom)
+        val googleEnvironmentAssessment = googleEnvironmentAssessment(
+            components = components,
+            compatibilityLayerConfirmed = compatibilityLayerConfirmed,
+            exactVerifiedRecord = exactVerifiedRecord,
+        )
         val validationLevel = validationLevel(
-            device = device,
-            android = android,
             rom = rom,
-            platformFamily = platformFamily,
             oemKnown = oem.isKnown,
             trustedEnvironmentVerified = trustedEnvironmentVerified,
+            exactVerifiedRecord = exactVerifiedRecord,
         )
         return DeviceProfile(
             manufacturer = device.manufacturer,
@@ -52,7 +56,7 @@ class GlobalDeviceProfileClassifier(
             androidApiLevel = android.apiLevel,
             romFamily = rom.family,
             romVersion = rom.version,
-            googleEnvironment = googleEnvironment,
+            googleEnvironmentAssessment = googleEnvironmentAssessment,
             installationCapability = installationCapability(platformFamily, android.apiLevel),
             validationLevel = validationLevel,
             evidence = buildList {
@@ -64,7 +68,30 @@ class GlobalDeviceProfileClassifier(
                     ),
                 )
                 add(DetectionEvidence("platform.family", platformFamily.name))
-                add(DetectionEvidence("google.environment", googleEnvironment.name))
+                add(
+                    DetectionEvidence(
+                        "google.component_set_state",
+                        googleEnvironmentAssessment.componentSetState.name,
+                    ),
+                )
+                add(
+                    DetectionEvidence(
+                        "google.component_trust",
+                        googleEnvironmentAssessment.componentTrust.name,
+                    ),
+                )
+                add(
+                    DetectionEvidence(
+                        "google.functional_health",
+                        googleEnvironmentAssessment.functionalHealth.name,
+                    ),
+                )
+                add(
+                    DetectionEvidence(
+                        "google.play_certification",
+                        googleEnvironmentAssessment.playCertification.name,
+                    ),
+                )
                 add(DetectionEvidence("validation.level", validationLevel.name))
                 add(
                     DetectionEvidence(
@@ -90,47 +117,119 @@ class GlobalDeviceProfileClassifier(
     private fun String?.majorVersion(): Int? =
         this?.let { VERSION_NUMBER.find(it)?.value?.toIntOrNull() }
 
-    private fun googleEnvironment(
+    private fun googleEnvironmentAssessment(
         components: List<SystemComponent>,
         compatibilityLayerConfirmed: Boolean,
-    ): GoogleEnvironment {
-        if (components.any { it.presence == ComponentPresence.CHECK_FAILED }) {
-            return GoogleEnvironment.UNKNOWN
-        }
+        exactVerifiedRecord: CatalogVerifiedDeviceCompatibilityRecord?,
+    ): GoogleEnvironmentAssessment {
         val playServices = components.firstOrNull { it.id == ComponentId.GOOGLE_PLAY_SERVICES }
         val playStore = components.firstOrNull { it.id == ComponentId.GOOGLE_PLAY_STORE }
-        val servicesUsable = playServices.isUsable()
-        val storeUsable = playStore.isUsable()
-        return when {
-            servicesUsable && storeUsable -> GoogleEnvironment.GMS_COMPLETE
-            compatibilityLayerConfirmed -> GoogleEnvironment.COMPATIBILITY_LAYER
-            playServices.isPresent() || playStore.isPresent() -> GoogleEnvironment.GMS_PARTIAL
-            playServices != null && playStore != null -> GoogleEnvironment.GMS_ABSENT
-            else -> GoogleEnvironment.UNKNOWN
+        val componentSetState = when {
+            listOfNotNull(playServices, playStore).any {
+                it.presence == ComponentPresence.CHECK_FAILED
+            } -> GoogleComponentSetState.UNKNOWN
+            playServices.isUsable() && playStore.isUsable() ->
+                GoogleComponentSetState.COMPLETE
+            playServices.isPresent() || playStore.isPresent() ->
+                GoogleComponentSetState.PARTIAL
+            playServices != null && playStore != null -> GoogleComponentSetState.ABSENT
+            else -> GoogleComponentSetState.UNKNOWN
         }
+        val pairMatchesVerifiedRecord = exactVerifiedRecord != null &&
+            componentSetState == GoogleComponentSetState.COMPLETE &&
+            components.matchVerifiedRecord(exactVerifiedRecord)
+        val hasVerifiedRecordMismatch = exactVerifiedRecord != null &&
+            components.hasVerifiedRecordMismatch(exactVerifiedRecord)
+        val componentTrust = when {
+            pairMatchesVerifiedRecord -> ComponentTrust.TRUSTED
+            hasVerifiedRecordMismatch -> ComponentTrust.MISMATCH
+            compatibilityLayerConfirmed -> ComponentTrust.COMPATIBILITY_REPORTED
+            componentSetState == GoogleComponentSetState.COMPLETE ||
+                componentSetState == GoogleComponentSetState.PARTIAL -> ComponentTrust.UNVERIFIED
+            componentSetState == GoogleComponentSetState.ABSENT -> ComponentTrust.UNKNOWN
+            else -> ComponentTrust.UNKNOWN
+        }
+        val functionalHealth = when {
+            pairMatchesVerifiedRecord -> FunctionalHealth.USER_CONFIRMED
+            componentSetState == GoogleComponentSetState.UNKNOWN -> FunctionalHealth.UNKNOWN
+            else -> FunctionalHealth.UNTESTED
+        }
+        return GoogleEnvironmentAssessment(
+            componentSetState = componentSetState,
+            componentTrust = componentTrust,
+            functionalHealth = functionalHealth,
+            playCertification = PlayCertification.UNKNOWN,
+            evidence = listOf(
+                DetectionEvidence("component_set.scan", componentSetState.name),
+                DetectionEvidence(
+                    "component_trust.source",
+                    when (componentTrust) {
+                        ComponentTrust.TRUSTED -> "SIGNED_DEVICE_VERIFIED_CATALOG_RECORD"
+                        ComponentTrust.COMPATIBILITY_REPORTED -> "COMPATIBILITY_LAYER_REPORT"
+                        ComponentTrust.MISMATCH -> "SIGNED_CATALOG_VERSION_MISMATCH"
+                        ComponentTrust.UNVERIFIED -> "PACKAGE_PRESENCE_ONLY"
+                        ComponentTrust.UNKNOWN -> "NO_TRUST_EVIDENCE"
+                    },
+                ),
+                DetectionEvidence(
+                    "functional_health.source",
+                    if (functionalHealth == FunctionalHealth.USER_CONFIRMED) {
+                        "SIGNED_DEVICE_VERIFICATION_EVIDENCE"
+                    } else {
+                        "NO_FUNCTIONAL_TEST_EVIDENCE"
+                    },
+                ),
+                DetectionEvidence(
+                    "play_certification.policy",
+                    "NOT_INFERRED_FROM_BRAND_ROM_COMPONENTS_OR_COMPATIBILITY_LAYER",
+                ),
+            ),
+        )
     }
 
     private fun validationLevel(
-        device: DeviceIdentity,
-        android: AndroidPlatform,
         rom: RomIdentification,
-        platformFamily: PlatformFamily,
         oemKnown: Boolean,
         trustedEnvironmentVerified: Boolean,
+        exactVerifiedRecord: CatalogVerifiedDeviceCompatibilityRecord?,
     ): GlobalValidationLevel {
-        val exactRecord = verifiedDeviceRecords.any { record ->
-            record.deviceModel == device.model &&
-                record.deviceFamily == device.model &&
-                record.romFamily == rom.family.catalogRomFamily() &&
-                record.harmonyOsVersion == rom.version &&
-                record.androidApiLevel == android.apiLevel
-        }
         return when {
-            exactRecord -> GlobalValidationLevel.DEVICE_VERIFIED
+            exactVerifiedRecord != null -> GlobalValidationLevel.DEVICE_VERIFIED
             trustedEnvironmentVerified -> GlobalValidationLevel.ENVIRONMENT_VERIFIED
             oemKnown && rom.family != RomFamily.UNKNOWN -> GlobalValidationLevel.PROBABLE
             else -> GlobalValidationLevel.UNKNOWN
         }
+    }
+
+    private fun exactVerifiedRecord(
+        device: DeviceIdentity,
+        android: AndroidPlatform,
+        rom: RomIdentification,
+    ): CatalogVerifiedDeviceCompatibilityRecord? = verifiedDeviceRecords.firstOrNull { record ->
+        record.compatibilityStatus == CompatibilityValidationStatus.DEVICE_VERIFIED &&
+            record.deviceModel == device.model &&
+            record.deviceFamily == device.model &&
+            record.romFamily == rom.family.catalogRomFamily() &&
+            record.harmonyOsVersion == rom.version &&
+            record.androidApiLevel == android.apiLevel
+    }
+
+    private fun List<SystemComponent>.matchVerifiedRecord(
+        record: CatalogVerifiedDeviceCompatibilityRecord,
+    ): Boolean = REQUIRED_GOOGLE_COMPONENTS.all { componentId ->
+        val component = firstOrNull { it.id == componentId } ?: return@all false
+        val expectedVersion = record.componentVersionCodes[component.packageName]
+        component.isUsable() &&
+            component.versionCode != null &&
+            component.versionCode.toString() == expectedVersion
+    }
+
+    private fun List<SystemComponent>.hasVerifiedRecordMismatch(
+        record: CatalogVerifiedDeviceCompatibilityRecord,
+    ): Boolean = filter { it.id in REQUIRED_GOOGLE_COMPONENTS && it.isPresent() }.any { component ->
+        val expectedVersion = record.componentVersionCodes[component.packageName]
+        expectedVersion != null && component.versionCode != null &&
+            component.versionCode.toString() != expectedVersion
     }
 
     private fun installationCapability(
@@ -175,5 +274,9 @@ class GlobalDeviceProfileClassifier(
             RomFamily.HMD_ANDROID,
         )
         val VERSION_NUMBER = Regex("\\d+")
+        val REQUIRED_GOOGLE_COMPONENTS = setOf(
+            ComponentId.GOOGLE_PLAY_SERVICES,
+            ComponentId.GOOGLE_PLAY_STORE,
+        )
     }
 }

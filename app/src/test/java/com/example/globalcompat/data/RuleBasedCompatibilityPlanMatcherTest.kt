@@ -10,7 +10,7 @@ class RuleBasedCompatibilityPlanMatcherTest {
     private val matcher = RuleBasedCompatibilityPlanMatcher()
 
     @Test
-    fun `Pixel with enabled Play Services and Play Store uses standard GMS`() {
+    fun `Pixel package presence alone does not become no action`() {
         val plan = match(
             manufacturer = "Google",
             brand = "google",
@@ -19,12 +19,12 @@ class RuleBasedCompatibilityPlanMatcherTest {
             components = components(gms = PRESENT, store = PRESENT),
         )
 
-        assertPlan(plan, DeviceCategory.STANDARD_GMS, CompatibilityPlanId.NO_ACTION_REQUIRED)
-        assertEquals(DetectionConfidence.MEDIUM, plan.confidence)
+        assertPlan(plan, DeviceCategory.UNKNOWN, CompatibilityPlanId.UNSUPPORTED_OR_UNKNOWN)
+        assertEquals(CompatibilityPlanStatus.UNDETERMINED, plan.status)
     }
 
     @Test
-    fun `Samsung One UI with complete core components uses standard GMS`() {
+    fun `Samsung package presence alone does not become no action`() {
         val plan = match(
             manufacturer = "samsung",
             brand = "samsung",
@@ -34,7 +34,8 @@ class RuleBasedCompatibilityPlanMatcherTest {
             components = components(gms = PRESENT, store = PRESENT),
         )
 
-        assertPlan(plan, DeviceCategory.STANDARD_GMS, CompatibilityPlanId.NO_ACTION_REQUIRED)
+        assertPlan(plan, DeviceCategory.UNKNOWN, CompatibilityPlanId.UNSUPPORTED_OR_UNKNOWN)
+        assertEquals(CompatibilityPlanStatus.UNDETERMINED, plan.status)
     }
 
     @Test

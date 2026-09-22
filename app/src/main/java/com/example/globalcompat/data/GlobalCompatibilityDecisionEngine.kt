@@ -29,23 +29,6 @@ class GlobalCompatibilityDecisionEngine(
             ),
         )
 
-        if (profile.googleEnvironment == GoogleEnvironment.GMS_COMPLETE) {
-            return decision(
-                profile = profile,
-                status = CompatibilityDecisionStatus.NO_ACTION_REQUIRED,
-                workflow = ApplicableWorkflow.NONE,
-                confidence = completeEnvironmentConfidence(profile.validationLevel),
-                evidence = baseEvidence,
-                warnings = listOf(
-                    message(
-                        "GMS_RUNTIME_HEALTH_OUTSIDE_SCAN",
-                        "已确认核心 Google 组件存在且启用；账号、认证与运行时健康仍不在本次扫描范围。",
-                    ),
-                ),
-                nextAction = CompatibilityNextAction.KEEP_CURRENT_ENVIRONMENT,
-            )
-        }
-
         if (profile.platformFamily == PlatformFamily.HARMONY_NATIVE) {
             return decision(
                 profile = profile,
@@ -80,6 +63,29 @@ class GlobalCompatibilityDecisionEngine(
             )
         }
 
+        if (profile.googleEnvironmentAssessment.isNoActionRequired(profile.validationLevel)) {
+            return decision(
+                profile = profile,
+                status = CompatibilityDecisionStatus.NO_ACTION_REQUIRED,
+                workflow = ApplicableWorkflow.NONE,
+                confidence = DetectionConfidence.HIGH,
+                evidence = baseEvidence,
+                warnings = buildList {
+                    if (profile.googleEnvironmentAssessment.playCertification ==
+                        PlayCertification.UNKNOWN
+                    ) {
+                        add(
+                            message(
+                                "PLAY_CERTIFICATION_UNKNOWN",
+                                "当前结论不代表 Play 认证已验证，也不泛化为 Google 生态完全健康。",
+                            ),
+                        )
+                    }
+                },
+                nextAction = CompatibilityNextAction.KEEP_CURRENT_ENVIRONMENT,
+            )
+        }
+
         val verifiedWorkflow = verifiedWorkflow(profile)
         if (profile.validationLevel == GlobalValidationLevel.DEVICE_VERIFIED &&
             verifiedWorkflow != null
@@ -98,7 +104,7 @@ class GlobalCompatibilityDecisionEngine(
             )
         }
 
-        if (profile.googleEnvironment in ENVIRONMENT_PROBLEM_STATES) {
+        if (profile.googleEnvironmentAssessment.componentSetState in DIAGNOSTIC_STATES) {
             return decision(
                 profile = profile,
                 status = CompatibilityDecisionStatus.DIAGNOSTIC_ONLY,
@@ -108,7 +114,13 @@ class GlobalCompatibilityDecisionEngine(
                 warnings = listOf(
                     message(
                         "EXACT_DEVICE_VERIFICATION_REQUIRED",
-                        "检测到 Google 环境问题，但没有精确 DEVICE_VERIFIED 签名工作流；不能解锁安装。",
+                        if (profile.googleEnvironmentAssessment.componentSetState ==
+                            GoogleComponentSetState.COMPLETE
+                        ) {
+                            "核心组件存在且启用，但可信度或功能健康证据不足；不能据此判断无需处理。"
+                        } else {
+                            "检测到 Google 环境问题，但没有精确 DEVICE_VERIFIED 签名工作流；不能解锁安装。"
+                        },
                     ),
                 ),
                 nextAction = CompatibilityNextAction.RUN_DIAGNOSTICS,
@@ -169,7 +181,7 @@ class GlobalCompatibilityDecisionEngine(
     ) = CompatibilityDecision(
         decisionStatus = status,
         validationLevel = profile.validationLevel,
-        googleEnvironment = profile.googleEnvironment,
+        googleEnvironmentAssessment = profile.googleEnvironmentAssessment,
         applicableWorkflow = workflow,
         confidence = confidence,
         evidence = evidence,
@@ -177,16 +189,6 @@ class GlobalCompatibilityDecisionEngine(
         warnings = warnings,
         nextAction = nextAction,
     )
-
-    private fun completeEnvironmentConfidence(level: GlobalValidationLevel) = when (level) {
-        GlobalValidationLevel.DEVICE_VERIFIED,
-        GlobalValidationLevel.ENVIRONMENT_VERIFIED,
-        -> DetectionConfidence.HIGH
-        GlobalValidationLevel.PROBABLE -> DetectionConfidence.MEDIUM
-        GlobalValidationLevel.UNKNOWN,
-        GlobalValidationLevel.BLOCKED,
-        -> DetectionConfidence.LOW
-    }
 
     private fun diagnosticConfidence(level: GlobalValidationLevel) = when (level) {
         GlobalValidationLevel.ENVIRONMENT_VERIFIED -> DetectionConfidence.HIGH
@@ -200,11 +202,21 @@ class GlobalCompatibilityDecisionEngine(
 
     private fun message(code: String, message: String) = DecisionMessage(code, message)
 
+    private fun GoogleEnvironmentAssessment.isNoActionRequired(
+        validationLevel: GlobalValidationLevel,
+    ): Boolean = componentSetState == GoogleComponentSetState.COMPLETE &&
+        componentTrust == ComponentTrust.TRUSTED &&
+        (
+            functionalHealth == FunctionalHealth.VERIFIED_HEALTHY ||
+                functionalHealth == FunctionalHealth.USER_CONFIRMED &&
+                validationLevel == GlobalValidationLevel.DEVICE_VERIFIED
+            )
+
     private companion object {
-        val ENVIRONMENT_PROBLEM_STATES = setOf(
-            GoogleEnvironment.GMS_ABSENT,
-            GoogleEnvironment.GMS_PARTIAL,
-            GoogleEnvironment.COMPATIBILITY_LAYER,
+        val DIAGNOSTIC_STATES = setOf(
+            GoogleComponentSetState.COMPLETE,
+            GoogleComponentSetState.PARTIAL,
+            GoogleComponentSetState.ABSENT,
         )
     }
 }
