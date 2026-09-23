@@ -9,6 +9,7 @@ import com.example.globalcompat.data.DeviceEnvironmentScanner
 import com.example.globalcompat.data.EnvironmentReport
 import com.example.globalcompat.installation.InstallationExecutionGate
 import com.example.globalcompat.installation.InstallationSessionPlan
+import com.example.globalcompat.installation.AndroidKeyStoreInstallAuthorizationSealer
 import com.example.globalcompat.simulation.SimulatedInstallationPlan
 import com.example.globalcompat.simulation.SimulatedInstallationPlanner
 
@@ -27,6 +28,8 @@ class DeviceBaselineScanner(
     private val fingerprintScanner: InstalledComponentFingerprintScanner =
         InstalledComponentFingerprintScanner(AndroidInstalledPackageLookup(context.packageManager)),
 ) {
+    private val authorizationSealer = AndroidKeyStoreInstallAuthorizationSealer()
+
     fun scan(): DeviceBaselineScanResult {
         val snapshot = catalogRepository.currentSnapshot()
         val environment = DeviceEnvironmentScanner(context, catalogSnapshot = snapshot).scan()
@@ -48,7 +51,10 @@ class DeviceBaselineScanner(
             environment = environment,
             componentComparisons = comparisons,
             simulatedInstallationPlan = simulatedPlan,
-            installationSessionPlan = InstallationExecutionGate(snapshot).evaluate(simulatedPlan),
+            installationSessionPlan = InstallationExecutionGate(
+                snapshot,
+                authorizationSealer,
+            ).evaluate(simulatedPlan),
             catalogSnapshot = snapshot,
         )
     }
@@ -77,7 +83,10 @@ class DeviceBaselineScanner(
         return scanResult.copy(
             componentComparisons = comparisons,
             simulatedInstallationPlan = simulatedPlan,
-            installationSessionPlan = InstallationExecutionGate(snapshot).evaluate(simulatedPlan),
+            installationSessionPlan = InstallationExecutionGate(
+                snapshot,
+                authorizationSealer,
+            ).evaluate(simulatedPlan),
         )
     }
 }

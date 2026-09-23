@@ -1,6 +1,7 @@
 package com.example.globalcompat.installation
 
 import com.example.globalcompat.data.DeviceCategory
+import com.example.globalcompat.data.PlatformFamily
 import com.example.globalcompat.data.RomFamily
 import com.example.globalcompat.preparation.EnvironmentPreparationResult
 
@@ -25,6 +26,7 @@ enum class InstallationExecutionFailure {
     HARMONYOS_5_PLUS_NOT_SUPPORTED,
     SESSION_PLAN_INVALID,
     CATALOG_SNAPSHOT_MISMATCH,
+    AUTHORIZATION_REJECTED,
     PREPARED_ARTIFACT_MISSING,
     PREPARED_ARTIFACT_REVALIDATION_FAILED,
     INSTALL_PERMISSION_DENIED,
@@ -37,6 +39,10 @@ enum class InstallationExecutionFailure {
 data class InstallationDeviceContext(
     val deviceCategory: DeviceCategory,
     val manufacturer: String,
+    val model: String,
+    val platformFamily: PlatformFamily,
+    val osVersion: String,
+    val androidApiLevel: Int,
     val romFamily: RomFamily,
     val romVersion: String?,
 )
@@ -45,6 +51,7 @@ data class InstallationExecutionRequest(
     val deviceContext: InstallationDeviceContext,
     val sessionPlan: InstallationSessionPlan,
     val preparationResult: EnvironmentPreparationResult,
+    val authorization: InstallAuthorization?,
 )
 
 data class ExecutableInstallationArtifact(
@@ -73,6 +80,7 @@ data class InstallationExecutionSnapshot(
     val updatedAtEpochMillis: Long,
     val catalogVersion: Long? = null,
     val catalogDigest: String? = null,
+    val authorization: InstallAuthorization? = null,
 )
 
 data class PreparedArtifactValidation(
@@ -116,6 +124,10 @@ fun interface InstalledComponentPostVerifier {
 
 fun interface FinalEnvironmentVerifier {
     fun verify(deviceContext: InstallationDeviceContext): Boolean
+}
+
+fun interface InstallationDeviceContextProvider {
+    fun current(): InstallationDeviceContext
 }
 
 interface PackageInstallerGateway {

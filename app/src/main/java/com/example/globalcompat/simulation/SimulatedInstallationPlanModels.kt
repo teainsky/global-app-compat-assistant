@@ -8,6 +8,7 @@ import com.example.globalcompat.data.CompatibilityPlanId
 import com.example.globalcompat.data.CompatibilityDecisionStatus
 import com.example.globalcompat.data.DeviceCategory
 import com.example.globalcompat.data.GlobalValidationLevel
+import com.example.globalcompat.data.PlatformFamily
 
 enum class SimulationPlanStatus {
     NO_ACTION_REQUIRED,
@@ -100,6 +101,7 @@ data class SimulatedInstallationPlan(
     val deviceCategory: DeviceCategory,
     val compatibilityPlanId: CompatibilityPlanId,
     val deviceModel: String,
+    val platformFamily: PlatformFamily,
     val systemVersion: String,
     val androidApiLevel: Int,
     val validationLevel: GlobalValidationLevel,

@@ -50,6 +50,8 @@ enum class InstallationStepState {
 enum class InstallationBlockReason {
     TRUSTED_CATALOG_UNAVAILABLE,
     CATALOG_SNAPSHOT_MISMATCH,
+    AUTHORIZATION_ISSUER_UNAVAILABLE,
+    EXACT_VERIFIED_DEVICE_RECORD_REQUIRED,
     DEVICE_BRANCH_NOT_ALLOWED,
     HARMONYOS_5_PLUS_NOT_SUPPORTED,
     SIMULATION_PLAN_BLOCKED,
@@ -91,4 +93,5 @@ data class InstallationSessionPlan(
     val blockReasons: List<InstallationBlockReason>,
     val catalogVersion: Long? = null,
     val catalogDigest: String? = null,
+    val authorization: InstallAuthorization? = null,
 )

@@ -8,12 +8,15 @@ import com.example.globalcompat.catalog.CatalogSystemFamily
 import com.example.globalcompat.catalog.ComponentArtifact
 import com.example.globalcompat.catalog.ComponentCatalog
 import com.example.globalcompat.catalog.ComponentRelease
+import com.example.globalcompat.catalog.CompatibilityValidationStatus
+import com.example.globalcompat.catalog.CatalogVerifiedDeviceCompatibilityRecord
 import com.example.globalcompat.catalog.RuntimeTrustedCatalogRepository
 import com.example.globalcompat.catalog.TrustedComponentCatalogMatcher
 import com.example.globalcompat.data.CompatibilityPlanId
 import com.example.globalcompat.data.CompatibilityDecisionStatus
 import com.example.globalcompat.data.DeviceCategory
 import com.example.globalcompat.data.GlobalValidationLevel
+import com.example.globalcompat.data.RomFamily
 import com.example.globalcompat.simulation.CurrentComponentState
 import com.example.globalcompat.simulation.SimulatedArtifact
 import com.example.globalcompat.simulation.SimulatedInstallationPlan
@@ -21,9 +24,12 @@ import com.example.globalcompat.simulation.SimulatedInstallationStep
 import com.example.globalcompat.simulation.SimulationNextAction
 import com.example.globalcompat.simulation.SimulationPlanStatus
 
-class InstallationExecutionGate(
+internal class InstallationExecutionGate(
     private val catalogSnapshot: CatalogSnapshot? =
         RuntimeTrustedCatalogRepository.instance.currentSnapshot(),
+    private val authorizationSealer: InstallAuthorizationSealer? = null,
+    private val clock: () -> Long = System::currentTimeMillis,
+    private val authorizationIdFactory: () -> String = { java.util.UUID.randomUUID().toString() },
 ) {
     private val catalog: ComponentCatalog
         get() = requireNotNull(catalogSnapshot) { "No trusted catalog snapshot" }.catalog
@@ -181,6 +187,49 @@ class InstallationExecutionGate(
                 reasons = listOf(InstallationBlockReason.SIMULATION_PLAN_BLOCKED),
             )
         }
+        val sealer = authorizationSealer ?: return blockedPlan(
+            simulatedPlan = simulatedPlan,
+            reasons = listOf(InstallationBlockReason.AUTHORIZATION_ISSUER_UNAVAILABLE),
+        )
+        val verifiedRecord = exactVerifiedDeviceRecord(simulatedPlan, catalogSelection)
+            ?: return blockedPlan(
+                simulatedPlan = simulatedPlan,
+                reasons = listOf(InstallationBlockReason.EXACT_VERIFIED_DEVICE_RECORD_REQUIRED),
+            )
+        val authorizationArtifacts = executableSteps.mapNotNull { step ->
+            step.downloadRequest?.let { request ->
+                InstallAuthorizationArtifact(
+                    packageName = request.packageName,
+                    versionCode = request.artifactVersionCode,
+                    sha256 = request.expectedSha256,
+                    signerSha256 = request.expectedSigningCertificateSha256,
+                )
+            }
+        }
+        if (authorizationArtifacts.size != executableSteps.size) {
+            return blockedPlan(
+                simulatedPlan = simulatedPlan,
+                reasons = listOf(InstallationBlockReason.CATALOG_METADATA_INCOMPLETE),
+            )
+        }
+        val authorization = runCatching {
+            InstallAuthorizationIssuer(
+                sealer = sealer,
+                clock = clock,
+                authorizationIdFactory = authorizationIdFactory,
+            ).issue(
+                InstallAuthorizationIssueRequest(
+                    deviceContext = simulatedPlan.installationDeviceContext(),
+                    catalogSnapshot = snapshot,
+                    verifiedDeviceRecord = verifiedRecord,
+                    workflowId = simulatedPlan.compatibilityPlanId.name,
+                    artifacts = authorizationArtifacts,
+                ),
+            )
+        }.getOrNull() ?: return blockedPlan(
+            simulatedPlan = simulatedPlan,
+            reasons = listOf(InstallationBlockReason.AUTHORIZATION_ISSUER_UNAVAILABLE),
+        )
         return InstallationSessionPlan(
             schemaVersion = SCHEMA_VERSION,
             status = InstallationSessionStatus.READY_FOR_USER_CONFIRMATION,
@@ -191,8 +240,47 @@ class InstallationExecutionGate(
             blockReasons = emptyList(),
             catalogVersion = snapshot.catalogVersion,
             catalogDigest = snapshot.catalogDigest,
+            authorization = authorization,
         )
     }
+
+    private fun exactVerifiedDeviceRecord(
+        simulatedPlan: SimulatedInstallationPlan,
+        selection: CatalogSelection,
+    ): CatalogVerifiedDeviceCompatibilityRecord? {
+        val release = selection.recommendedRelease ?: return null
+        val record = catalog.verifiedDeviceRecords.singleOrNull { candidate ->
+            candidate.compatibilityStatus == CompatibilityValidationStatus.DEVICE_VERIFIED &&
+                candidate.deviceModel == simulatedPlan.deviceModel &&
+                candidate.deviceFamily == simulatedPlan.deviceModel &&
+                candidate.romFamily == RomFamily.HARMONY_OS.name &&
+                candidate.harmonyOsVersion == simulatedPlan.systemVersion &&
+                candidate.androidApiLevel == simulatedPlan.androidApiLevel &&
+                candidate.componentRelease == release.releaseTag
+        } ?: return null
+        val artifacts = release.artifacts
+        val versionsMatch = artifacts.all { artifact ->
+            record.componentVersionCodes[artifact.packageName] == artifact.artifactVersionCode
+        }
+        val signersMatch = artifacts.all { artifact ->
+            record.componentSignerDigests[artifact.packageName]
+                ?.map { it.normalizeDigest() }
+                ?.toSet() == setOf(artifact.signingCertificateDigest?.normalizeDigest())
+        }
+        return record.takeIf { versionsMatch && signersMatch }
+    }
+
+    private fun SimulatedInstallationPlan.installationDeviceContext() =
+        InstallationDeviceContext(
+            deviceCategory = deviceCategory,
+            manufacturer = "Huawei",
+            model = deviceModel,
+            platformFamily = platformFamily,
+            osVersion = systemVersion,
+            androidApiLevel = androidApiLevel,
+            romFamily = RomFamily.HARMONY_OS,
+            romVersion = systemVersion,
+        )
 
     private fun evaluateInstallationStep(
         selectedArtifact: SimulatedArtifact,
@@ -476,6 +564,10 @@ class InstallationExecutionGate(
             "没有可信 catalog，仅允许基础诊断"
         InstallationBlockReason.CATALOG_SNAPSHOT_MISMATCH in reasons ->
             "规则版本不一致，安装已被安全门禁阻止"
+        InstallationBlockReason.AUTHORIZATION_ISSUER_UNAVAILABLE in reasons ->
+            "无法生成可信安装授权，安装已被安全门禁阻止"
+        InstallationBlockReason.EXACT_VERIFIED_DEVICE_RECORD_REQUIRED in reasons ->
+            "缺少精确设备验证记录，安装已被安全门禁阻止"
         else -> "安装前置证据不足，已安全停止"
     }
 

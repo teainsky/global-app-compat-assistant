@@ -9,11 +9,14 @@ import android.content.pm.PackageInstaller
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
+import android.security.keystore.KeyGenParameterSpec
+import android.security.keystore.KeyProperties
 import com.example.globalcompat.baseline.AndroidInstalledPackageLookup
 import com.example.globalcompat.baseline.OfficialComponentMatcher
-import com.example.globalcompat.catalog.CatalogSnapshot
 import com.example.globalcompat.catalog.RuntimeTrustedCatalogRepository
+import com.example.globalcompat.catalog.TrustedCatalogSnapshotProvider
 import com.example.globalcompat.data.DeviceCategory
+import com.example.globalcompat.data.DeviceEnvironmentScanner
 import com.example.globalcompat.data.RomFamily
 import com.example.globalcompat.preparation.AndroidDownloadedApkInspector
 import com.google.gson.Gson
@@ -22,7 +25,64 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import java.io.File
+import java.security.KeyStore
 import java.security.MessageDigest
+import javax.crypto.KeyGenerator
+import javax.crypto.SecretKey
+
+internal class AndroidKeyStoreInstallAuthorizationSealer : InstallAuthorizationSealer {
+    private val delegate = HmacSha256InstallAuthorizationSealer(::key)
+
+    override fun seal(payload: ByteArray): String = delegate.seal(payload)
+
+    override fun verify(payload: ByteArray, proof: String): Boolean =
+        delegate.verify(payload, proof)
+
+    @Synchronized
+    private fun key(): SecretKey {
+        val keyStore = KeyStore.getInstance(ANDROID_KEY_STORE).apply { load(null) }
+        (keyStore.getKey(KEY_ALIAS, null) as? SecretKey)?.let { return it }
+        return KeyGenerator.getInstance(
+            KeyProperties.KEY_ALGORITHM_HMAC_SHA256,
+            ANDROID_KEY_STORE,
+        ).run {
+            init(
+                KeyGenParameterSpec.Builder(
+                    KEY_ALIAS,
+                    KeyProperties.PURPOSE_SIGN or KeyProperties.PURPOSE_VERIFY,
+                ).setDigests(KeyProperties.DIGEST_SHA256).build(),
+            )
+            generateKey()
+        }
+    }
+
+    private companion object {
+        const val ANDROID_KEY_STORE = "AndroidKeyStore"
+        const val KEY_ALIAS = "globalcompat.install-authorization.hmac.v1"
+    }
+}
+
+internal class AndroidInstallationDeviceContextProvider(
+    private val context: Context,
+    private val catalogProvider: TrustedCatalogSnapshotProvider,
+) : InstallationDeviceContextProvider {
+    override fun current(): InstallationDeviceContext {
+        val report = DeviceEnvironmentScanner(
+            context = context,
+            catalogSnapshot = catalogProvider.currentSnapshot(),
+        ).scan()
+        return InstallationDeviceContext(
+            deviceCategory = report.compatibilityPlan.deviceCategory,
+            manufacturer = report.device.manufacturer,
+            model = report.deviceProfile.model,
+            platformFamily = report.deviceProfile.platformFamily,
+            osVersion = report.deviceProfile.osVersion,
+            androidApiLevel = report.deviceProfile.androidApiLevel,
+            romFamily = report.rom.family,
+            romVersion = report.rom.version,
+        )
+    }
+}
 
 class SharedPreferencesInstallationSessionStore(
     context: Context,
@@ -237,10 +297,15 @@ class AndroidInstalledComponentPostVerifier(
 
 class AndroidFinalEnvironmentVerifier(
     private val componentVerifier: InstalledComponentPostVerifier,
-    private val catalogSnapshot: CatalogSnapshot?,
+    private val catalogProvider: TrustedCatalogSnapshotProvider,
 ) : FinalEnvironmentVerifier {
     override fun verify(deviceContext: InstallationDeviceContext): Boolean {
-        val artifacts = catalogSnapshot?.catalog?.releases?.singleOrNull()?.artifacts ?: return false
+        val artifacts = catalogProvider.currentSnapshot()
+            ?.catalog
+            ?.releases
+            ?.singleOrNull()
+            ?.artifacts
+            ?: return false
         return artifacts.isNotEmpty() && artifacts.all { artifact ->
             val expected = ExecutableInstallationArtifact(
                 componentId = artifact.componentId,
@@ -268,16 +333,20 @@ class AndroidFinalEnvironmentVerifier(
 class AndroidInstallationExecutorService(
     private val context: Context,
 ) {
-    private val catalogSnapshot = RuntimeTrustedCatalogRepository.instance.currentSnapshot()
+    private val catalogRepository = RuntimeTrustedCatalogRepository.instance
     private val store = SharedPreferencesInstallationSessionStore(context)
     private val gateway = AndroidPackageInstallerGateway(context)
     private val postVerifier = AndroidInstalledComponentPostVerifier(context)
+    private val authorizationSealer = AndroidKeyStoreInstallAuthorizationSealer()
     private val executor = InstallationExecutor(
         sessionStore = store,
         packageInstallerGateway = gateway,
         preparedArtifactRevalidator = AndroidPreparedArtifactRevalidator(context),
         installedComponentVerifier = postVerifier,
-        finalEnvironmentVerifier = AndroidFinalEnvironmentVerifier(postVerifier, catalogSnapshot),
+        finalEnvironmentVerifier = AndroidFinalEnvironmentVerifier(postVerifier, catalogRepository),
+        deviceContextProvider = AndroidInstallationDeviceContextProvider(context, catalogRepository),
+        catalogProvider = catalogRepository,
+        authorizationPolicy = AuthorizationRevalidationPolicy(authorizationSealer),
     )
 
     fun begin(request: InstallationExecutionRequest): InstallationExecutionSnapshot =

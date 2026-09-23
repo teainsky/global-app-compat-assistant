@@ -1,24 +1,34 @@
 package com.example.globalcompat.installation
 
+import com.example.globalcompat.catalog.TrustedCatalogSnapshotProvider
 import com.example.globalcompat.data.DeviceCategory
 import com.example.globalcompat.preparation.EnvironmentPreparationStatus
 import java.io.File
 import java.util.UUID
 
-class InstallationExecutor(
+internal class InstallationExecutor(
     private val sessionStore: InstallationSessionStore,
     private val packageInstallerGateway: PackageInstallerGateway,
     private val preparedArtifactRevalidator: PreparedArtifactRevalidator,
     private val installedComponentVerifier: InstalledComponentPostVerifier,
     private val finalEnvironmentVerifier: FinalEnvironmentVerifier,
+    private val deviceContextProvider: InstallationDeviceContextProvider,
+    private val catalogProvider: TrustedCatalogSnapshotProvider,
+    private val authorizationPolicy: AuthorizationRevalidationPolicy,
     private val clock: () -> Long = System::currentTimeMillis,
     private val sessionIdFactory: () -> String = { UUID.randomUUID().toString() },
 ) {
     fun begin(request: InstallationExecutionRequest): InstallationExecutionSnapshot {
         sessionStore.load()?.takeUnless { it.state.isTerminal() }?.let { return restore() ?: it }
-        if (request.deviceContext.deviceCategory == DeviceCategory.HARMONYOS_5_PLUS) {
-            return blocked(
+        val currentDevice = runCatching { deviceContextProvider.current() }.getOrNull()
+            ?: return blocked(
                 request.deviceContext,
+                InstallationExecutionFailure.AUTHORIZATION_REJECTED,
+                "无法重新读取当前设备画像，安装授权已拒绝",
+            )
+        if (currentDevice.deviceCategory == DeviceCategory.HARMONYOS_5_PLUS) {
+            return blocked(
+                currentDevice,
                 InstallationExecutionFailure.HARMONYOS_5_PLUS_NOT_SUPPORTED,
                 "HarmonyOS 5+ 不进入旧鸿蒙安装流程",
             )
@@ -77,6 +87,35 @@ class InstallationExecutor(
                 "安装计划中的组件数量无效",
             )
         }
+        val authorization = request.authorization
+        if (authorization == null ||
+            request.sessionPlan.authorization?.authorizationId != authorization.authorizationId ||
+            request.sessionPlan.authorization?.authorizationProof != authorization.authorizationProof
+        ) {
+            return blocked(
+                currentDevice,
+                InstallationExecutionFailure.AUTHORIZATION_REJECTED,
+                "缺少可信安装授权，安装已拒绝",
+                catalogVersion,
+                catalogDigest,
+            )
+        }
+        val authorizationResult = authorizationPolicy.revalidate(
+            authorization = authorization,
+            currentDevice = currentDevice,
+            activeSnapshot = catalogProvider.currentSnapshot(),
+            artifacts = artifacts,
+            now = clock(),
+        )
+        if (!authorizationResult.isAuthorized) {
+            return blocked(
+                currentDevice,
+                InstallationExecutionFailure.AUTHORIZATION_REJECTED,
+                "安装授权复核失败：${authorizationResult.reason}",
+                catalogVersion,
+                catalogDigest,
+            )
+        }
         val invalidArtifact = artifacts.firstOrNull { artifact ->
             !File(artifact.filePath).isFile ||
                 File(artifact.filePath).length() != artifact.expectedSizeBytes ||
@@ -100,7 +139,7 @@ class InstallationExecutor(
                 schemaVersion = SCHEMA_VERSION,
                 logicalSessionId = sessionIdFactory(),
                 state = state,
-                deviceContext = request.deviceContext,
+                deviceContext = currentDevice,
                 artifacts = artifacts,
                 nextArtifactIndex = 0,
                 activeArtifactIndex = null,
@@ -114,6 +153,7 @@ class InstallationExecutor(
                 updatedAtEpochMillis = clock(),
                 catalogVersion = catalogVersion,
                 catalogDigest = catalogDigest,
+                authorization = authorization,
             ),
         )
     }
@@ -123,6 +163,7 @@ class InstallationExecutor(
         if (snapshot.state != InstallationExecutionState.WAITING_FOR_INSTALL_PERMISSION) {
             return snapshot
         }
+        rejectIfAuthorizationInvalid(snapshot)?.let { return it }
         return if (packageInstallerGateway.hasInstallPermission()) {
             save(
                 snapshot.copy(
@@ -146,6 +187,7 @@ class InstallationExecutor(
     fun continueExecution(): InstallationExecutionSnapshot? {
         val snapshot = sessionStore.load() ?: return null
         if (snapshot.state != InstallationExecutionState.READY) return snapshot
+        rejectIfAuthorizationInvalid(snapshot)?.let { return it }
         if (!packageInstallerGateway.hasInstallPermission()) {
             return save(
                 snapshot.copy(
@@ -259,6 +301,9 @@ class InstallationExecutor(
 
     fun restore(): InstallationExecutionSnapshot? {
         val snapshot = sessionStore.load() ?: return null
+        if (!snapshot.state.isTerminal()) {
+            rejectIfAuthorizationInvalid(snapshot)?.let { return it }
+        }
         return when (snapshot.state) {
             InstallationExecutionState.WAITING_FOR_INSTALL_PERMISSION ->
                 onInstallPermissionResult()
@@ -437,6 +482,39 @@ class InstallationExecutor(
         reportedSigningCertificateSha256.isNotEmpty() &&
         reportedSignerAccepted
 
+    private fun rejectIfAuthorizationInvalid(
+        snapshot: InstallationExecutionSnapshot,
+    ): InstallationExecutionSnapshot? {
+        val authorization = snapshot.authorization
+            ?: return fail(
+                snapshot,
+                InstallationExecutionFailure.AUTHORIZATION_REJECTED,
+                "恢复的安装会话缺少可信授权",
+            )
+        val currentDevice = runCatching { deviceContextProvider.current() }.getOrNull()
+            ?: return fail(
+                snapshot,
+                InstallationExecutionFailure.AUTHORIZATION_REJECTED,
+                "无法重新读取当前设备画像，安装授权已拒绝",
+            )
+        val result = authorizationPolicy.revalidate(
+            authorization = authorization,
+            currentDevice = currentDevice,
+            activeSnapshot = catalogProvider.currentSnapshot(),
+            artifacts = snapshot.artifacts,
+            now = clock(),
+        )
+        return if (result.isAuthorized) {
+            null
+        } else {
+            fail(
+                snapshot,
+                InstallationExecutionFailure.AUTHORIZATION_REJECTED,
+                "安装授权复核失败：${result.reason}",
+            )
+        }
+    }
+
     private fun blocked(
         context: InstallationDeviceContext,
         failure: InstallationExecutionFailure,
@@ -458,6 +536,7 @@ class InstallationExecutor(
             updatedAtEpochMillis = clock(),
             catalogVersion = catalogVersion,
             catalogDigest = catalogDigest,
+            authorization = null,
         ),
     )
 

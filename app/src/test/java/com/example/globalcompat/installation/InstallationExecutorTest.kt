@@ -1,12 +1,18 @@
 package com.example.globalcompat.installation
 
 import com.example.globalcompat.catalog.ComponentSourceType
+import com.example.globalcompat.catalog.BlockedVersionRule
+import com.example.globalcompat.catalog.BuiltInComponentCatalog
+import com.example.globalcompat.catalog.CatalogSnapshot
+import com.example.globalcompat.catalog.asTestSnapshot
 import com.example.globalcompat.data.DeviceCategory
+import com.example.globalcompat.data.PlatformFamily
 import com.example.globalcompat.data.RomFamily
 import com.example.globalcompat.preparation.EnvironmentPreparationResult
 import com.example.globalcompat.preparation.EnvironmentPreparationStatus
 import com.example.globalcompat.preparation.PreparedEnvironmentComponent
 import com.example.globalcompat.simulation.SimulatedInstallAction
+import com.google.gson.Gson
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -169,6 +175,7 @@ class InstallationExecutorTest {
         val restarted = fixture.newExecutor()
 
         val restored = restarted.restore()
+        assertEquals(null, restored?.failure)
         restarted.onPackageInstallerEvent(
             checkNotNull(restored).logicalSessionId,
             checkNotNull(restored.packageInstallerSessionId),
@@ -184,15 +191,75 @@ class InstallationExecutorTest {
     }
 
     @Test
+    fun `executor rereads device and rejects model change before PackageInstaller`() {
+        val fixture = fixture(permissionGranted = true)
+        fixture.executor.begin(fixture.request)
+        fixture.deviceProvider.context = fixture.deviceProvider.context.copy(model = "HBN-AL90")
+
+        val result = fixture.executor.continueExecution()
+
+        assertEquals(InstallationExecutionState.FAILED, result?.state)
+        assertEquals(InstallationExecutionFailure.AUTHORIZATION_REJECTED, result?.failure)
+        assertTrue(fixture.gateway.committedComponents.isEmpty())
+    }
+
+    @Test
+    fun `executor rereads catalog and rejects security revocation before PackageInstaller`() {
+        val fixture = fixture(permissionGranted = true)
+        fixture.executor.begin(fixture.request)
+        val current = checkNotNull(fixture.catalogProvider.snapshot)
+        val gms = current.catalog.releases.single().artifacts.single {
+            it.componentId == GMS_COMPONENT_ID
+        }
+        fixture.catalogProvider.snapshot = current.catalog.copy(
+            catalogVersion = current.catalogVersion + 1,
+            blockedVersions = listOf(
+                BlockedVersionRule(
+                    componentId = gms.componentId,
+                    versions = setOf(requireNotNull(gms.artifactVersionCode)),
+                    reason = "security revocation",
+                ),
+            ),
+        ).asTestSnapshot()
+
+        val result = fixture.executor.continueExecution()
+
+        assertEquals(InstallationExecutionState.FAILED, result?.state)
+        assertEquals(InstallationExecutionFailure.AUTHORIZATION_REJECTED, result?.failure)
+        assertTrue(fixture.gateway.committedComponents.isEmpty())
+    }
+
+    @Test
+    fun `executor rejects authorization forged through persisted JSON`() {
+        val fixture = fixture(permissionGranted = true)
+        val gson = Gson()
+        val tree = gson.toJsonTree(fixture.request.authorization).asJsonObject
+        tree.addProperty("androidApiLevel", 32)
+        val forged = gson.fromJson(tree, InstallAuthorization::class.java)
+        val request = fixture.request.copy(
+            authorization = forged,
+            sessionPlan = fixture.request.sessionPlan.copy(authorization = forged),
+        )
+
+        val result = fixture.executor.begin(request)
+
+        assertEquals(InstallationExecutionState.BLOCKED, result.state)
+        assertEquals(InstallationExecutionFailure.AUTHORIZATION_REJECTED, result.failure)
+        assertTrue(fixture.gateway.committedComponents.isEmpty())
+    }
+
+    @Test
     fun `HarmonyOS 5 plus cannot enter legacy installer even with forged ready plan`() {
         val fixture = fixture(permissionGranted = true)
-        val request = fixture.request.copy(
-            deviceContext = fixture.request.deviceContext.copy(
-                deviceCategory = DeviceCategory.HARMONYOS_5_PLUS,
-                romFamily = RomFamily.HARMONY_OS_5_PLUS,
-                romVersion = "5.0",
-            ),
+        val harmony5 = fixture.request.deviceContext.copy(
+            deviceCategory = DeviceCategory.HARMONYOS_5_PLUS,
+            platformFamily = PlatformFamily.HARMONY_NATIVE,
+            osVersion = "5.0",
+            romFamily = RomFamily.HARMONY_OS_5_PLUS,
+            romVersion = "5.0",
         )
+        fixture.deviceProvider.context = harmony5
+        val request = fixture.request.copy(deviceContext = harmony5)
 
         val result = fixture.executor.begin(request)
 
@@ -206,18 +273,47 @@ class InstallationExecutorTest {
     }
 
     private fun fixture(permissionGranted: Boolean): Fixture {
+        val catalogSnapshot = BuiltInComponentCatalog.catalog.asTestSnapshot()
         val preparedComponents = listOf(
             prepared(GMS_COMPONENT_ID, GMS_PACKAGE, GMS_FILENAME, "gms"),
             prepared(VENDING_COMPONENT_ID, VENDING_PACKAGE, VENDING_FILENAME, "vending"),
         )
-        val plan = readyPlan(preparedComponents)
-        val request = InstallationExecutionRequest(
-            deviceContext = InstallationDeviceContext(
-                deviceCategory = DeviceCategory.HUAWEI_HARMONY_ANDROID_COMPAT,
-                manufacturer = "Huawei",
-                romFamily = RomFamily.HARMONY_OS,
-                romVersion = "4.2",
+        val deviceContext = InstallationDeviceContext(
+            deviceCategory = DeviceCategory.HUAWEI_HARMONY_ANDROID_COMPAT,
+            manufacturer = "Huawei",
+            model = "HBN-AL80",
+            platformFamily = PlatformFamily.HARMONY_ANDROID_COMPAT,
+            osVersion = "4.2.0",
+            androidApiLevel = 31,
+            romFamily = RomFamily.HARMONY_OS,
+            romVersion = "4.2.0",
+        )
+        val unsignedPlan = readyPlan(preparedComponents, catalogSnapshot)
+        val sealer = testInstallAuthorizationSealer()
+        val authorization = InstallAuthorizationIssuer(
+            sealer = sealer,
+            clock = { 1_700_000_000_000L },
+            authorizationIdFactory = { "test-authorization" },
+        ).issue(
+            InstallAuthorizationIssueRequest(
+                deviceContext = deviceContext,
+                catalogSnapshot = catalogSnapshot,
+                verifiedDeviceRecord = catalogSnapshot.catalog.verifiedDeviceRecords.single(),
+                workflowId = "HUAWEI_MICROG_COMPAT_PLAN",
+                artifacts = unsignedPlan.steps.map { step ->
+                    val download = checkNotNull(step.downloadRequest)
+                    InstallAuthorizationArtifact(
+                        packageName = download.packageName,
+                        versionCode = download.artifactVersionCode,
+                        sha256 = download.expectedSha256,
+                        signerSha256 = download.expectedSigningCertificateSha256,
+                    )
+                },
             ),
+        )
+        val plan = unsignedPlan.copy(authorization = authorization)
+        val request = InstallationExecutionRequest(
+            deviceContext = deviceContext,
             sessionPlan = plan,
             preparationResult = EnvironmentPreparationResult(
                 status = EnvironmentPreparationStatus.DOWNLOAD_VERIFIED_READY,
@@ -225,21 +321,35 @@ class InstallationExecutorTest {
                 failures = emptyList(),
                 installationAllowed = true,
                 technicalDetails = emptyList(),
-                catalogVersion = CATALOG_VERSION,
-                catalogDigest = CATALOG_DIGEST,
+                catalogVersion = catalogSnapshot.catalogVersion,
+                catalogDigest = catalogSnapshot.catalogDigest,
             ),
+            authorization = authorization,
         )
         val store = MemoryStore()
         val gateway = FakeGateway(permissionGranted)
         val installedVerifier = FakeInstalledVerifier()
         val finalVerifier = FakeFinalVerifier()
+        val deviceProvider = MutableDeviceProvider(deviceContext)
+        val catalogProvider = MutableCatalogSnapshotProvider(catalogSnapshot)
         return Fixture(
             request = request,
             store = store,
             gateway = gateway,
             installedVerifier = installedVerifier,
             finalVerifier = finalVerifier,
-            executor = executor(store, gateway, installedVerifier, finalVerifier),
+            deviceProvider = deviceProvider,
+            catalogProvider = catalogProvider,
+            authorizationSealer = sealer,
+            executor = executor(
+                store,
+                gateway,
+                installedVerifier,
+                finalVerifier,
+                deviceProvider,
+                catalogProvider,
+                sealer,
+            ),
         )
     }
 
@@ -248,6 +358,9 @@ class InstallationExecutorTest {
         gateway: FakeGateway,
         installedVerifier: FakeInstalledVerifier,
         finalVerifier: FakeFinalVerifier,
+        deviceProvider: MutableDeviceProvider,
+        catalogProvider: MutableCatalogSnapshotProvider,
+        authorizationSealer: InstallAuthorizationSealer,
     ) = InstallationExecutor(
         sessionStore = store,
         packageInstallerGateway = gateway,
@@ -256,6 +369,9 @@ class InstallationExecutorTest {
         },
         installedComponentVerifier = installedVerifier,
         finalEnvironmentVerifier = finalVerifier,
+        deviceContextProvider = deviceProvider,
+        catalogProvider = catalogProvider,
+        authorizationPolicy = AuthorizationRevalidationPolicy(authorizationSealer),
         clock = { 1_700_000_000_000L },
         sessionIdFactory = { "test-session" },
     )
@@ -278,23 +394,21 @@ class InstallationExecutorTest {
 
     private fun readyPlan(
         prepared: List<PreparedEnvironmentComponent>,
+        catalogSnapshot: CatalogSnapshot,
     ): InstallationSessionPlan {
-        val specs = listOf(
+        val release = catalogSnapshot.catalog.releases.single()
+        val specs = release.artifacts.map { artifact ->
             ComponentSpec(
-                GMS_COMPONENT_ID,
-                GMS_PACKAGE,
-                GMS_FILENAME,
-                "252432032",
-                "0.3.16.252432-hw",
-            ),
-            ComponentSpec(
-                VENDING_COMPONENT_ID,
-                VENDING_PACKAGE,
-                VENDING_FILENAME,
-                "84022632",
-                "0.3.16.40226-hw",
-            ),
-        )
+                componentId = artifact.componentId,
+                packageName = artifact.packageName,
+                filename = requireNotNull(artifact.artifactFilename),
+                versionCode = requireNotNull(artifact.artifactVersionCode),
+                versionName = requireNotNull(artifact.artifactVersionName),
+                sourceAssetId = requireNotNull(artifact.githubAssetId),
+                sha256 = requireNotNull(artifact.sha256),
+                signer = requireNotNull(artifact.signingCertificateDigest),
+            )
+        }
         return InstallationSessionPlan(
             schemaVersion = 1,
             status = InstallationSessionStatus.READY_FOR_USER_CONFIRMATION,
@@ -312,25 +426,25 @@ class InstallationExecutorTest {
                     downloadRequest = ArtifactDownloadRequest(
                         componentId = spec.componentId,
                         packageName = spec.packageName,
-                        releaseTag = "v0.3.16.252432",
+                        releaseTag = release.releaseTag,
                         artifactFilename = spec.filename,
                         artifactVersionCode = spec.versionCode,
                         artifactVersionName = spec.versionName,
                         sourceType = ComponentSourceType.OFFICIAL_MICROG_GITHUB,
                         sourceUrl = "https://github.com/microg/GmsCore/releases/download/tag/${spec.filename}",
-                        sourceAssetId = (index + 1).toLong(),
-                        expectedSha256 = SHA256,
-                        expectedSigningCertificateSha256 = SIGNER,
-                        catalogVersion = CATALOG_VERSION,
-                        catalogDigest = CATALOG_DIGEST,
+                        sourceAssetId = spec.sourceAssetId,
+                        expectedSha256 = spec.sha256,
+                        expectedSigningCertificateSha256 = spec.signer,
+                        catalogVersion = catalogSnapshot.catalogVersion,
+                        catalogDigest = catalogSnapshot.catalogDigest,
                     ),
                     verificationResult = ArtifactVerificationResult(
                         componentId = spec.componentId,
                         downloadEvidencePresent = true,
-                        sourceAssetId = (index + 1).toLong(),
+                        sourceAssetId = spec.sourceAssetId,
                         artifactFilename = preparedComponent.artifactFilename,
-                        locallyCalculatedSha256 = SHA256,
-                        signingCertificateSha256 = listOf(SIGNER),
+                        locallyCalculatedSha256 = spec.sha256,
+                        signingCertificateSha256 = listOf(spec.signer),
                         apkSignatureVerificationPassed = true,
                         packageName = spec.packageName,
                         versionCode = spec.versionCode,
@@ -340,8 +454,8 @@ class InstallationExecutorTest {
                 )
             },
             blockReasons = emptyList(),
-            catalogVersion = CATALOG_VERSION,
-            catalogDigest = CATALOG_DIGEST,
+            catalogVersion = catalogSnapshot.catalogVersion,
+            catalogDigest = catalogSnapshot.catalogDigest,
         )
     }
 
@@ -351,6 +465,9 @@ class InstallationExecutorTest {
         val filename: String,
         val versionCode: String,
         val versionName: String,
+        val sourceAssetId: Long,
+        val sha256: String,
+        val signer: String,
     )
 
     private data class Fixture(
@@ -359,6 +476,9 @@ class InstallationExecutorTest {
         val gateway: FakeGateway,
         val installedVerifier: FakeInstalledVerifier,
         val finalVerifier: FakeFinalVerifier,
+        val deviceProvider: MutableDeviceProvider,
+        val catalogProvider: MutableCatalogSnapshotProvider,
+        val authorizationSealer: InstallAuthorizationSealer,
         val executor: InstallationExecutor,
     ) {
         fun newExecutor(): InstallationExecutor = InstallationExecutor(
@@ -369,22 +489,34 @@ class InstallationExecutorTest {
             },
             installedComponentVerifier = installedVerifier,
             finalEnvironmentVerifier = finalVerifier,
+            deviceContextProvider = deviceProvider,
+            catalogProvider = catalogProvider,
+            authorizationPolicy = AuthorizationRevalidationPolicy(authorizationSealer),
             clock = { 1_700_000_000_001L },
             sessionIdFactory = { "restarted-session" },
         )
     }
 
-    private class MemoryStore : InstallationSessionStore {
-        private var snapshot: InstallationExecutionSnapshot? = null
+    private class MutableDeviceProvider(
+        var context: InstallationDeviceContext,
+    ) : InstallationDeviceContextProvider {
+        override fun current(): InstallationDeviceContext = context
+    }
 
-        override fun load(): InstallationExecutionSnapshot? = snapshot
+    private class MemoryStore : InstallationSessionStore {
+        private val gson = Gson()
+        private var snapshotJson: String? = null
+
+        override fun load(): InstallationExecutionSnapshot? = snapshotJson?.let {
+            gson.fromJson(it, InstallationExecutionSnapshot::class.java)
+        }
 
         override fun save(snapshot: InstallationExecutionSnapshot) {
-            this.snapshot = snapshot
+            snapshotJson = gson.toJson(snapshot)
         }
 
         override fun clear() {
-            snapshot = null
+            snapshotJson = null
         }
     }
 
@@ -443,12 +575,5 @@ class InstallationExecutorTest {
         const val VENDING_PACKAGE = "com.android.vending"
         const val GMS_FILENAME = "com.google.android.gms-252432032-hw.apk"
         const val VENDING_FILENAME = "com.android.vending-84022632-hw.apk"
-        const val SHA256 =
-            "a44ce933e2336d3340eb82ad3bb28bba03bc56a7b3cf3c98250a225c55b572de"
-        const val SIGNER =
-            "9bd06727e62796c0130eb6dab39b73157451582cbd138e86c468acc395d14165"
-        const val CATALOG_VERSION = 1L
-        const val CATALOG_DIGEST =
-            "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
     }
 }

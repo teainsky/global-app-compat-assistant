@@ -10,6 +10,7 @@ import com.example.globalcompat.data.CompatibilityPlanId
 import com.example.globalcompat.data.CompatibilityDecisionStatus
 import com.example.globalcompat.data.DeviceCategory
 import com.example.globalcompat.data.GlobalValidationLevel
+import com.example.globalcompat.data.PlatformFamily
 import com.example.globalcompat.simulation.CurrentComponentDecision
 import com.example.globalcompat.simulation.CurrentComponentState
 import com.example.globalcompat.simulation.SimulatedArtifact
@@ -83,6 +84,12 @@ class InstallationExecutionGateTest {
         assertTrue(result.steps.all {
             it.state == InstallationStepState.READY_FOR_USER_CONFIRMATION
         })
+        val authorization = checkNotNull(result.authorization)
+        assertEquals("HBN-AL80", authorization.model)
+        assertEquals(PlatformFamily.HARMONY_ANDROID_COMPAT, authorization.platformFamily)
+        assertEquals("4.2.0", authorization.osVersion)
+        assertEquals(31, authorization.androidApiLevel)
+        assertEquals(2, authorization.artifacts.size)
         assertEquals(plan.catalogVersion, result.catalogVersion)
         assertEquals(plan.catalogDigest, result.catalogDigest)
         assertTrue(result.steps.all { step ->
@@ -148,6 +155,7 @@ class InstallationExecutionGateTest {
                 GMS_COMPONENT_ID to CurrentComponentState.NOT_INSTALLED,
                 VENDING_COMPONENT_ID to CurrentComponentState.NOT_INSTALLED,
             ),
+            deviceModel = "unverified-device",
         )
 
         val result = InstallationExecutionGate(builtIn).evaluate(
@@ -181,6 +189,7 @@ class InstallationExecutionGateTest {
             )
 
             assertBlocked(result, InstallationBlockReason.COMPATIBILITY_NOT_DEVICE_VERIFIED)
+            assertTrue(result.authorization == null)
         }
     }
 
@@ -212,6 +221,7 @@ class InstallationExecutionGateTest {
                 GMS_COMPONENT_ID to CurrentComponentState.COMPATIBILITY_SIGNATURE_REPORTED,
                 VENDING_COMPONENT_ID to CurrentComponentState.COMPATIBILITY_SIGNATURE_REPORTED,
             ),
+            deviceModel = "unverified-device",
         )
 
         val result = InstallationExecutionGate(builtIn).evaluate(plan)
@@ -416,6 +426,7 @@ class InstallationExecutionGateTest {
         validationLevel: GlobalValidationLevel = GlobalValidationLevel.DEVICE_VERIFIED,
         decisionStatus: CompatibilityDecisionStatus =
             CompatibilityDecisionStatus.VERIFIED_WORKFLOW_AVAILABLE,
+        deviceModel: String = "HBN-AL80",
     ): SimulatedInstallationPlan {
         val release = catalog.releases.single()
         val selectedArtifacts = if (category == DeviceCategory.HARMONYOS_5_PLUS) {
@@ -482,8 +493,13 @@ class InstallationExecutionGateTest {
             },
             deviceCategory = category,
             compatibilityPlanId = planId,
-            deviceModel = "test-device",
-            systemVersion = if (category == DeviceCategory.HARMONYOS_5_PLUS) "5.0" else "4.2",
+            deviceModel = deviceModel,
+            platformFamily = if (category == DeviceCategory.HARMONYOS_5_PLUS) {
+                PlatformFamily.HARMONY_NATIVE
+            } else {
+                PlatformFamily.HARMONY_ANDROID_COMPAT
+            },
+            systemVersion = if (category == DeviceCategory.HARMONYOS_5_PLUS) "5.0" else "4.2.0",
             androidApiLevel = 31,
             validationLevel = validationLevel,
             compatibilityDecisionStatus = decisionStatus,
@@ -548,4 +564,9 @@ class InstallationExecutionGateTest {
 }
 
 internal fun InstallationExecutionGate(catalog: ComponentCatalog) =
-    InstallationExecutionGate(catalog.asTestSnapshot())
+    InstallationExecutionGate(
+        catalogSnapshot = catalog.asTestSnapshot(),
+        authorizationSealer = testInstallAuthorizationSealer(),
+        clock = { 1_700_000_000_000L },
+        authorizationIdFactory = { "test-authorization" },
+    )

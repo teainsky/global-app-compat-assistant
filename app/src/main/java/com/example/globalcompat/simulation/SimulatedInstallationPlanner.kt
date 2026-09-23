@@ -431,6 +431,7 @@ class SimulatedInstallationPlanner(
         deviceCategory = environment.compatibilityPlan.deviceCategory,
         compatibilityPlanId = environment.compatibilityPlan.planId,
         deviceModel = environment.device.model,
+        platformFamily = environment.deviceProfile.platformFamily,
         systemVersion = environment.rom.version.orEmpty(),
         androidApiLevel = environment.android.apiLevel,
         validationLevel = environment.deviceProfile.validationLevel,

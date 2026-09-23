@@ -17,6 +17,10 @@ data class CatalogSnapshot(
     val catalog: ComponentCatalog,
 )
 
+fun interface TrustedCatalogSnapshotProvider {
+    fun currentSnapshot(): CatalogSnapshot?
+}
+
 internal data class VerifiedRemoteCatalog(
     val catalogJson: ByteArray,
     val detachedSignature: ByteArray,
@@ -27,11 +31,11 @@ class TrustedCatalogRepository private constructor(
     initial: TrustedEntry?,
     private val clock: () -> Long,
     private val codec: CompatibilityCatalogCodec = CompatibilityCatalogCodec(),
-) {
+) : TrustedCatalogSnapshotProvider {
     private val active = AtomicReference(initial)
     private val previous = AtomicReference<TrustedEntry?>(null)
 
-    fun currentSnapshot(): CatalogSnapshot? {
+    override fun currentSnapshot(): CatalogSnapshot? {
         val current = active.get() ?: return null
         if (current.isValid(codec)) return current.snapshot
         val fallback = previous.get()?.takeIf { it.isValid(codec) }
