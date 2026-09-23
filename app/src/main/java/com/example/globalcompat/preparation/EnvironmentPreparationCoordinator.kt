@@ -16,6 +16,7 @@ import com.example.globalcompat.data.CompatibilityPlanId
 import com.example.globalcompat.data.CompatibilityDecisionStatus
 import com.example.globalcompat.data.DeviceCategory
 import com.example.globalcompat.data.GlobalValidationLevel
+import com.example.globalcompat.data.PlatformFamily
 import java.io.File
 import java.io.IOException
 import java.net.URI
@@ -251,7 +252,9 @@ class EnvironmentPreparationCoordinator(
             )
         }
         val catalog = snapshot.catalog
-        if (request.deviceCategory == DeviceCategory.HARMONYOS_5_PLUS ||
+        if (request.platformFamily != PlatformFamily.HARMONY_ANDROID_COMPAT ||
+            request.deviceCategory == DeviceCategory.HARMONYOS_5_PLUS ||
+            request.deviceCategory == DeviceCategory.HARMONY_VERSION_UNKNOWN ||
             request.deviceCategory != DeviceCategory.HUAWEI_HARMONY_ANDROID_COMPAT ||
             request.planId != CompatibilityPlanId.HUAWEI_MICROG_COMPAT_PLAN
         ) {

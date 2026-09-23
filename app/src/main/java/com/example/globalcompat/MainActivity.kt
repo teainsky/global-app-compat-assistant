@@ -190,6 +190,7 @@ private fun ScannerScreen(scanner: DeviceBaselineScanner) {
                             preparationService.prepare(
                                 request = EnvironmentPreparationRequest(
                                     deviceCategory = result.environment.compatibilityPlan.deviceCategory,
+                                    platformFamily = result.environment.deviceProfile.platformFamily,
                                     planId = result.environment.compatibilityPlan.planId,
                                     deviceModel = result.environment.device.model,
                                     systemVersion = result.environment.rom.version,
@@ -628,7 +629,15 @@ private fun EnvironmentPreparationCard(
             com.example.globalcompat.data.DeviceCategory.HARMONYOS_5_PLUS
         ) {
             Text(
-                text = "HarmonyOS 5+ 不进入旧鸿蒙组件流程。",
+                text = "当前系统不适用现有 Android 兼容环境工作流。",
+                style = MaterialTheme.typography.bodySmall,
+            )
+        }
+        if (!branchAllowed && plan.deviceCategory ==
+            com.example.globalcompat.data.DeviceCategory.HARMONY_VERSION_UNKNOWN
+        ) {
+            Text(
+                text = "当前系统版本无法安全识别，暂不执行配置。",
                 style = MaterialTheme.typography.bodySmall,
             )
         }
@@ -674,8 +683,13 @@ private fun CompatibilityDecisionCard(decision: CompatibilityDecision) {
         CompatibilityDecisionStatus.NO_ACTION_REQUIRED -> "当前已验证组件状态无需处理"
         CompatibilityDecisionStatus.VERIFIED_WORKFLOW_AVAILABLE -> "已有可信方案，可以准备环境"
         CompatibilityDecisionStatus.DIAGNOSTIC_ONLY -> "检测到环境问题，当前仅提供诊断"
-        CompatibilityDecisionStatus.CURRENT_WORKFLOW_NOT_APPLICABLE ->
-            "当前工作流不适用于此系统"
+        CompatibilityDecisionStatus.CURRENT_WORKFLOW_NOT_APPLICABLE -> if (
+            decision.warnings.any { it.code == "HARMONY_VERSION_UNKNOWN" }
+        ) {
+            "当前系统版本无法安全识别，暂不执行配置"
+        } else {
+            "当前系统不适用现有 Android 兼容环境工作流"
+        }
         CompatibilityDecisionStatus.UNKNOWN -> "证据不足，暂时无法安全判断"
         CompatibilityDecisionStatus.BLOCKED_BY_KNOWN_RULE -> "可信规则已阻止当前流程"
     }
@@ -791,6 +805,8 @@ private fun InstallationExecutionGateCard(plan: InstallationSessionPlan) {
         plan.status == InstallationSessionStatus.NO_ACTION_REQUIRED -> "无需安装"
         InstallationBlockReason.HARMONYOS_5_PLUS_NOT_SUPPORTED in plan.blockReasons ->
             "当前系统不适用，禁止安装"
+        InstallationBlockReason.HARMONY_VERSION_UNKNOWN in plan.blockReasons ->
+            "系统版本无法安全识别，暂不安装"
         InstallationBlockReason.SIGNATURE_MISMATCH in plan.blockReasons ->
             "签名异常，禁止安装"
         InstallationBlockReason.OFFICIAL_SOURCE_UNAVAILABLE in plan.blockReasons ->

@@ -189,6 +189,64 @@ class InstallAuthorizationRevalidationPolicyTest {
         assertTrue(!result.isAuthorized)
     }
 
+    @Test
+    fun `native and unknown Harmony profiles cannot receive authorization`() {
+        val restrictedProfiles = listOf(
+            device.copy(
+                deviceCategory = DeviceCategory.HARMONYOS_5_PLUS,
+                platformFamily = PlatformFamily.HARMONY_NATIVE,
+                osVersion = "6.1.0.135",
+                romFamily = RomFamily.HARMONY_OS_5_PLUS,
+                romVersion = "6.1.0.135",
+            ),
+            device.copy(
+                deviceCategory = DeviceCategory.HARMONY_VERSION_UNKNOWN,
+                platformFamily = PlatformFamily.HARMONY_VERSION_UNKNOWN,
+                osVersion = "",
+                romFamily = RomFamily.HARMONY_VERSION_UNKNOWN,
+                romVersion = null,
+            ),
+        )
+
+        restrictedProfiles.forEach { restricted ->
+            val result = runCatching {
+                InstallAuthorizationIssuer(sealer).issue(
+                    InstallAuthorizationIssueRequest(
+                        deviceContext = restricted,
+                        catalogSnapshot = snapshot,
+                        verifiedDeviceRecord = snapshot.catalog.verifiedDeviceRecords.single(),
+                        workflowId = "HUAWEI_MICROG_COMPAT_PLAN",
+                        artifacts = artifacts.map {
+                            InstallAuthorizationArtifact(
+                                packageName = it.packageName,
+                                versionCode = it.expectedVersionCode,
+                                sha256 = it.expectedSha256,
+                                signerSha256 = it.expectedSigningCertificateSha256,
+                            )
+                        },
+                    ),
+                )
+            }
+            assertTrue(result.isFailure)
+        }
+    }
+
+    @Test
+    fun `unknown Harmony profile rejects an existing old Harmony authorization`() {
+        val unknownHarmony = device.copy(
+            deviceCategory = DeviceCategory.HARMONY_VERSION_UNKNOWN,
+            platformFamily = PlatformFamily.HARMONY_VERSION_UNKNOWN,
+            osVersion = "",
+            romFamily = RomFamily.HARMONY_VERSION_UNKNOWN,
+            romVersion = null,
+        )
+
+        val result = revalidate(authorization(), device = unknownHarmony)
+
+        assertEquals(AuthorizationRejectionReason.HARMONY_VERSION_UNKNOWN, result.reason)
+        assertTrue(!result.isAuthorized)
+    }
+
     private fun authorization(): InstallAuthorization = InstallAuthorizationIssuer(
         sealer = sealer,
         clock = { ISSUED_AT },

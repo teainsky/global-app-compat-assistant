@@ -147,7 +147,7 @@ class RuleBasedCompatibilityPlanMatcherTest {
 
     @Test
     fun `HarmonyOS 5_0 5_1 and future versions never enter legacy Huawei plan`() {
-        listOf("5.0", "5.1", "6.0").forEach { version ->
+        listOf("5.0", "5.1", "6.0", "6.1.0.135").forEach { version ->
             val plan = match(
                 manufacturer = "HUAWEI",
                 brand = "HUAWEI",
@@ -169,6 +169,27 @@ class RuleBasedCompatibilityPlanMatcherTest {
                 },
             )
         }
+    }
+
+    @Test
+    fun `unknown HarmonyOS version is not rescued by complete Google packages`() {
+        val plan = match(
+            manufacturer = "HUAWEI",
+            brand = "HUAWEI",
+            model = "unknown-harmony",
+            romFamily = RomFamily.HARMONY_VERSION_UNKNOWN,
+            romVersion = null,
+            components = components(gms = PRESENT, store = PRESENT, hms = PRESENT),
+        )
+
+        assertPlan(
+            plan,
+            DeviceCategory.HARMONY_VERSION_UNKNOWN,
+            CompatibilityPlanId.UNSUPPORTED_OR_UNKNOWN,
+        )
+        assertEquals(CompatibilityPlanStatus.UNSUPPORTED, plan.status)
+        assertTrue(plan.requiredComponents.isEmpty())
+        assertTrue(plan.warnings.single().message.contains("版本无法安全识别"))
     }
 
     @Test

@@ -2,6 +2,7 @@ package com.example.globalcompat.installation
 
 import com.example.globalcompat.catalog.TrustedCatalogSnapshotProvider
 import com.example.globalcompat.data.DeviceCategory
+import com.example.globalcompat.data.PlatformFamily
 import com.example.globalcompat.preparation.EnvironmentPreparationStatus
 import java.io.File
 import java.util.UUID
@@ -26,7 +27,18 @@ internal class InstallationExecutor(
                 InstallationExecutionFailure.AUTHORIZATION_REJECTED,
                 "无法重新读取当前设备画像，安装授权已拒绝",
             )
-        if (currentDevice.deviceCategory == DeviceCategory.HARMONYOS_5_PLUS) {
+        if (currentDevice.deviceCategory == DeviceCategory.HARMONY_VERSION_UNKNOWN ||
+            currentDevice.platformFamily == PlatformFamily.HARMONY_VERSION_UNKNOWN
+        ) {
+            return blocked(
+                currentDevice,
+                InstallationExecutionFailure.HARMONY_VERSION_UNKNOWN,
+                "当前系统版本无法安全识别，暂不执行配置",
+            )
+        }
+        if (currentDevice.deviceCategory == DeviceCategory.HARMONYOS_5_PLUS ||
+            currentDevice.platformFamily == PlatformFamily.HARMONY_NATIVE
+        ) {
             return blocked(
                 currentDevice,
                 InstallationExecutionFailure.HARMONYOS_5_PLUS_NOT_SUPPORTED,

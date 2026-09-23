@@ -16,6 +16,7 @@ import com.example.globalcompat.data.CompatibilityPlanId
 import com.example.globalcompat.data.CompatibilityDecisionStatus
 import com.example.globalcompat.data.DeviceCategory
 import com.example.globalcompat.data.GlobalValidationLevel
+import com.example.globalcompat.data.PlatformFamily
 import com.example.globalcompat.data.RomFamily
 import com.example.globalcompat.simulation.CurrentComponentState
 import com.example.globalcompat.simulation.SimulatedArtifact
@@ -52,8 +53,17 @@ internal class InstallationExecutionGate(
                 listOf(InstallationBlockReason.CATALOG_SNAPSHOT_MISMATCH),
             )
         }
+        if (simulatedPlan.deviceCategory == DeviceCategory.HARMONY_VERSION_UNKNOWN ||
+            simulatedPlan.platformFamily == PlatformFamily.HARMONY_VERSION_UNKNOWN
+        ) {
+            return blockedPlan(
+                simulatedPlan = simulatedPlan,
+                reasons = listOf(InstallationBlockReason.HARMONY_VERSION_UNKNOWN),
+            )
+        }
         if ((gatePolicy.blockHarmonyOs5PlusLegacyPlan &&
                 simulatedPlan.deviceCategory == DeviceCategory.HARMONYOS_5_PLUS) ||
+            simulatedPlan.platformFamily == PlatformFamily.HARMONY_NATIVE ||
             simulatedPlan.nextAction == SimulationNextAction.STOP_UNSUPPORTED_SYSTEM
         ) {
             return blockedPlan(
@@ -548,6 +558,8 @@ internal class InstallationExecutionGate(
     private fun blockMessage(reasons: List<InstallationBlockReason>): String = when {
         InstallationBlockReason.HARMONYOS_5_PLUS_NOT_SUPPORTED in reasons ->
             "HarmonyOS 5+ 不进入旧鸿蒙安装流程"
+        InstallationBlockReason.HARMONY_VERSION_UNKNOWN in reasons ->
+            "当前系统版本无法安全识别，暂不执行配置"
         InstallationBlockReason.SIGNATURE_MISMATCH in reasons ->
             "组件签名异常，安装已被安全门禁阻止"
         InstallationBlockReason.OFFICIAL_SOURCE_UNAVAILABLE in reasons ->

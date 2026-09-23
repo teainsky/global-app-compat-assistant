@@ -194,7 +194,7 @@ class GlobalCompatibilityDecisionEngineTest {
 
     @Test
     fun `HarmonyOS 5 and 6 native branch wins over component presence`() {
-        listOf("5.0", "6.0").forEach { version ->
+        listOf("5.0", "5.1", "6.0", "6.1.0.135").forEach { version ->
             val decision = engine.decide(
                 hbnProfile(
                     assessment(
@@ -220,6 +220,31 @@ class GlobalCompatibilityDecisionEngineTest {
             )
             assertEquals(ApplicableWorkflow.NONE, decision.applicableWorkflow)
         }
+    }
+
+    @Test
+    fun `unknown HarmonyOS version wins over complete component presence`() {
+        val decision = engine.decide(
+            hbnProfile(presenceOnly()).copy(
+                model = "unknown-harmony",
+                deviceFamily = "unknown-harmony",
+                platformFamily = PlatformFamily.HARMONY_VERSION_UNKNOWN,
+                osVersion = "",
+                romFamily = RomFamily.HARMONY_VERSION_UNKNOWN,
+                romVersion = null,
+                installationCapability = InstallationCapability.NOT_APPLICABLE,
+                validationLevel = GlobalValidationLevel.UNKNOWN,
+            ),
+        )
+
+        assertEquals(
+            CompatibilityDecisionStatus.CURRENT_WORKFLOW_NOT_APPLICABLE,
+            decision.decisionStatus,
+        )
+        assertEquals(ApplicableWorkflow.NONE, decision.applicableWorkflow)
+        assertTrue(decision.warnings.any {
+            it.message == "当前系统版本无法安全识别，暂不执行配置。"
+        })
     }
 
     @Test

@@ -41,7 +41,11 @@ class TrustedComponentCatalogMatcher {
         catalog: ComponentCatalog,
         request: CatalogMatchRequest,
     ): CatalogSelection {
-        if (request.deviceCategory == DeviceCategory.HARMONYOS_5_PLUS) return EMPTY_SELECTION
+        if (request.deviceCategory == DeviceCategory.HARMONYOS_5_PLUS ||
+            request.deviceCategory == DeviceCategory.HARMONY_VERSION_UNKNOWN
+        ) {
+            return EMPTY_SELECTION
+        }
 
         val policy = catalog.verificationPolicy
         val requiredVariant = policy.requiredVariantByPlan[request.planId] ?: return EMPTY_SELECTION

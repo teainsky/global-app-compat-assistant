@@ -204,6 +204,27 @@ class GlobalDeviceProfileClassifierTest {
     }
 
     @Test
+    fun `unknown HarmonyOS version is not Android compatible`() {
+        val unknown = profile(
+            manufacturer = "HUAWEI",
+            brand = "HUAWEI",
+            model = "unknown-harmony",
+            romFamily = RomFamily.HARMONY_VERSION_UNKNOWN,
+            romVersion = null,
+            components = googleComponents(present = true),
+        )
+
+        assertEquals(PlatformFamily.HARMONY_VERSION_UNKNOWN, unknown.platformFamily)
+        assertEquals(OsFamily.HARMONY_OS, unknown.osFamily)
+        assertEquals(InstallationCapability.NOT_APPLICABLE, unknown.installationCapability)
+        assertEquals(GlobalValidationLevel.UNKNOWN, unknown.validationLevel)
+        assertEquals(
+            GoogleComponentSetState.COMPLETE,
+            unknown.googleEnvironmentAssessment.componentSetState,
+        )
+    }
+
+    @Test
     fun `registry is extensible and initial brands are not a support whitelist`() {
         val registry = OemBrandRegistry()
         val aliases = registry.registrations.flatMap { it.aliases }.map { it.lowercase() }.toSet()

@@ -14,12 +14,7 @@ class PropertyBasedRomIdentifier : RomIdentifier {
     override fun identify(probe: RomProbe): RomIdentification {
         val properties = probe.properties.filterValues { it.isNotBlank() }
 
-        return detectHarmonyOs5Plus(probe, properties) ?: detect(
-            properties = properties,
-            family = RomFamily.HARMONY_OS,
-            displayName = "HarmonyOS",
-            versionKeys = HARMONY_VERSION_KEYS,
-        ) ?: detect(
+        return detectHarmonyOs(probe) ?: detect(
             properties = properties,
             family = RomFamily.HYPER_OS,
             displayName = "HyperOS",
@@ -163,40 +158,73 @@ class PropertyBasedRomIdentifier : RomIdentifier {
         .split('_')
         .joinToString(" ") { it.replaceFirstChar(Char::uppercase) }
 
-    private fun detectHarmonyOs5Plus(
-        probe: RomProbe,
-        properties: Map<String, String>,
-    ): RomIdentification? {
-        val harmonyEvidence = HARMONY_VERSION_KEYS.mapNotNull { key ->
-            properties[key]?.let { DetectionEvidence(key, it) }
-        }
-        val explicitNextEvidence = harmonyEvidence.filter {
-            it.value.contains("next", ignoreCase = true)
+    private fun detectHarmonyOs(probe: RomProbe): RomIdentification? {
+        val propertyEvidence = HARMONY_VERSION_KEYS.mapNotNull { key ->
+            if (probe.properties.containsKey(key)) {
+                DetectionEvidence(key, probe.properties[key].orEmpty())
+            } else {
+                null
+            }
         }
         val displayEvidence = probe.buildDisplay
-            .takeIf { it.contains("harmonyos next", ignoreCase = true) }
+            .takeIf { HARMONY_MARKER.containsMatchIn(it) }
             ?.let { DetectionEvidence("build.display", it) }
-        val versionFiveOrNewer = harmonyEvidence.firstOrNull {
-            VERSION_NUMBER.find(it.value)?.value?.toIntOrNull()?.let { major -> major >= 5 } == true
-        }
-        val evidence = buildList {
-            addAll(explicitNextEvidence)
-            displayEvidence?.let(::add)
-            if (isEmpty()) versionFiveOrNewer?.let(::add)
-        }
-        if (evidence.isEmpty()) return null
+        if (propertyEvidence.isEmpty() && displayEvidence == null) return null
 
+        val evidence = propertyEvidence + listOfNotNull(displayEvidence)
+        if (evidence.any { HARMONY_NEXT.containsMatchIn(it.value) }) {
+            val contradictsLegacyBranch = evidence.mapNotNull { it.value.harmonyVersion() }
+                .mapNotNull { VERSION_NUMBER.matchAt(it, 0)?.value?.toIntOrNull() }
+                .any { it in 1..4 }
+            if (contradictsLegacyBranch) return harmonyVersionUnknown(evidence)
+            return RomIdentification(
+                family = RomFamily.HARMONY_OS_5_PLUS,
+                displayName = "HarmonyOS 5+",
+                version = evidence.firstNotNullOfOrNull { it.value.harmonyVersion() } ?: "5+",
+                confidence = DetectionConfidence.HIGH,
+                evidence = evidence,
+            )
+        }
+
+        val parsedVersions = evidence.mapNotNull { it.value.harmonyVersion() }
+        val majorVersions = parsedVersions.mapNotNull { version ->
+            VERSION_NUMBER.matchAt(version, 0)?.value?.toIntOrNull()
+        }.distinct()
+        val hasUnparseableEvidence = propertyEvidence.any { it.value.harmonyVersion() == null } ||
+            parsedVersions.isEmpty()
+        if (hasUnparseableEvidence || majorVersions.size != 1) {
+            return harmonyVersionUnknown(evidence)
+        }
+
+        val version = parsedVersions.first()
+        val major = majorVersions.single()
+        val family = when {
+            major in 1..4 -> RomFamily.HARMONY_OS
+            major >= 5 -> RomFamily.HARMONY_OS_5_PLUS
+            else -> return harmonyVersionUnknown(evidence)
+        }
         return RomIdentification(
-            family = RomFamily.HARMONY_OS_5_PLUS,
-            displayName = "HarmonyOS 5+",
-            version = harmonyEvidence.firstOrNull()?.value ?: "5+",
-            confidence = if (explicitNextEvidence.isNotEmpty() || displayEvidence != null) {
-                DetectionConfidence.HIGH
-            } else {
-                DetectionConfidence.MEDIUM
-            },
+            family = family,
+            displayName = if (family == RomFamily.HARMONY_OS) "HarmonyOS" else "HarmonyOS 5+",
+            version = version,
+            confidence = DetectionConfidence.HIGH,
             evidence = evidence,
         )
+    }
+
+    private fun harmonyVersionUnknown(evidence: List<DetectionEvidence>) = RomIdentification(
+        family = RomFamily.HARMONY_VERSION_UNKNOWN,
+        displayName = "HarmonyOS（版本无法确认）",
+        version = null,
+        confidence = DetectionConfidence.UNKNOWN,
+        evidence = evidence,
+    )
+
+    private fun String.harmonyVersion(): String? {
+        val trimmed = trim()
+        if (trimmed.isEmpty()) return null
+        HARMONY_VERSION_ONLY.matchEntire(trimmed)?.let { return it.groupValues[1] }
+        return HARMONY_VERSION_IN_DISPLAY.find(trimmed)?.groupValues?.get(1)
     }
 
     private fun unknown(probe: RomProbe): RomIdentification {
@@ -221,6 +249,10 @@ class PropertyBasedRomIdentifier : RomIdentifier {
             "ro.build.version.harmony",
         )
         private val VERSION_NUMBER = Regex("\\d+")
+        private val HARMONY_MARKER = Regex("(?i)harmony\\s*os")
+        private val HARMONY_NEXT = Regex("(?i)harmony\\s*os\\s*next|^next$")
+        private val HARMONY_VERSION_ONLY = Regex("(?i)^(?:harmony\\s*os\\s*)?(\\d+(?:\\.\\d+)*)$")
+        private val HARMONY_VERSION_IN_DISPLAY = Regex("(?i)harmony\\s*os\\s*(\\d+(?:\\.\\d+)*)")
 
         val PROPERTY_KEYS = setOf(
             "hw_sc.build.platform.version",

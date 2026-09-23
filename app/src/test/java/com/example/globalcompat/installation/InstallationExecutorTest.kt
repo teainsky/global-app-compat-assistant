@@ -272,6 +272,26 @@ class InstallationExecutorTest {
         assertTrue(fixture.gateway.committedComponents.isEmpty())
     }
 
+    @Test
+    fun `unknown HarmonyOS version cannot reach PackageInstaller`() {
+        val fixture = fixture(permissionGranted = true)
+        val unknownHarmony = fixture.request.deviceContext.copy(
+            deviceCategory = DeviceCategory.HARMONY_VERSION_UNKNOWN,
+            platformFamily = PlatformFamily.HARMONY_VERSION_UNKNOWN,
+            osVersion = "",
+            romFamily = RomFamily.HARMONY_VERSION_UNKNOWN,
+            romVersion = null,
+        )
+        fixture.deviceProvider.context = unknownHarmony
+        val request = fixture.request.copy(deviceContext = unknownHarmony)
+
+        val result = fixture.executor.begin(request)
+
+        assertEquals(InstallationExecutionState.BLOCKED, result.state)
+        assertEquals(InstallationExecutionFailure.HARMONY_VERSION_UNKNOWN, result.failure)
+        assertTrue(fixture.gateway.committedComponents.isEmpty())
+    }
+
     private fun fixture(permissionGranted: Boolean): Fixture {
         val catalogSnapshot = BuiltInComponentCatalog.catalog.asTestSnapshot()
         val preparedComponents = listOf(

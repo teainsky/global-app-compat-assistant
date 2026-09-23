@@ -249,6 +249,28 @@ class InstallationExecutionGateTest {
 
         assertBlocked(result, InstallationBlockReason.HARMONYOS_5_PLUS_NOT_SUPPORTED)
         assertTrue(result.steps.isEmpty())
+        assertEquals(null, result.authorization)
+    }
+
+    @Test
+    fun `unknown HarmonyOS version cannot receive install authorization`() {
+        val plan = simulatedPlan(
+            catalog = deviceVerifiedCatalog(),
+            states = emptyMap(),
+            category = DeviceCategory.HARMONY_VERSION_UNKNOWN,
+            planId = CompatibilityPlanId.UNSUPPORTED_OR_UNKNOWN,
+        ).copy(
+            platformFamily = PlatformFamily.HARMONY_VERSION_UNKNOWN,
+            systemVersion = "",
+            status = SimulationPlanStatus.NO_ACTION_REQUIRED,
+            nextAction = SimulationNextAction.NO_ACTION_REQUIRED,
+        )
+
+        val result = InstallationExecutionGate(deviceVerifiedCatalog()).evaluate(plan)
+
+        assertBlocked(result, InstallationBlockReason.HARMONY_VERSION_UNKNOWN)
+        assertTrue(result.steps.isEmpty())
+        assertEquals(null, result.authorization)
     }
 
     @Test
@@ -429,7 +451,9 @@ class InstallationExecutionGateTest {
         deviceModel: String = "HBN-AL80",
     ): SimulatedInstallationPlan {
         val release = catalog.releases.single()
-        val selectedArtifacts = if (category == DeviceCategory.HARMONYOS_5_PLUS) {
+        val selectedArtifacts = if (category == DeviceCategory.HARMONYOS_5_PLUS ||
+            category == DeviceCategory.HARMONY_VERSION_UNKNOWN
+        ) {
             emptyList()
         } else {
             release.artifacts.map { artifact ->
@@ -480,26 +504,31 @@ class InstallationExecutionGateTest {
         val allComplete = states.size == COMPONENT_ORDER.size && states.values.all {
             it == CurrentComponentState.OFFICIAL_ARTIFACT_MATCH
         }
-        val isHarmony5 = category == DeviceCategory.HARMONYOS_5_PLUS
+        val isUnsupportedHarmony = category == DeviceCategory.HARMONYOS_5_PLUS ||
+            category == DeviceCategory.HARMONY_VERSION_UNKNOWN
         return SimulatedInstallationPlan(
             schemaVersion = 1,
             simulationOnly = true,
             realInstallationAllowed = false,
             status = when {
                 allComplete -> SimulationPlanStatus.NO_ACTION_REQUIRED
-                hasSignatureMismatch || isHarmony5 -> SimulationPlanStatus.BLOCKED
+                hasSignatureMismatch || isUnsupportedHarmony -> SimulationPlanStatus.BLOCKED
                 needsArtifactVerification -> SimulationPlanStatus.REVIEW_REQUIRED
                 else -> SimulationPlanStatus.SIMULATION_READY
             },
             deviceCategory = category,
             compatibilityPlanId = planId,
             deviceModel = deviceModel,
-            platformFamily = if (category == DeviceCategory.HARMONYOS_5_PLUS) {
-                PlatformFamily.HARMONY_NATIVE
-            } else {
-                PlatformFamily.HARMONY_ANDROID_COMPAT
+            platformFamily = when (category) {
+                DeviceCategory.HARMONYOS_5_PLUS -> PlatformFamily.HARMONY_NATIVE
+                DeviceCategory.HARMONY_VERSION_UNKNOWN -> PlatformFamily.HARMONY_VERSION_UNKNOWN
+                else -> PlatformFamily.HARMONY_ANDROID_COMPAT
             },
-            systemVersion = if (category == DeviceCategory.HARMONYOS_5_PLUS) "5.0" else "4.2.0",
+            systemVersion = when (category) {
+                DeviceCategory.HARMONYOS_5_PLUS -> "5.0"
+                DeviceCategory.HARMONY_VERSION_UNKNOWN -> ""
+                else -> "4.2.0"
+            },
             androidApiLevel = 31,
             validationLevel = validationLevel,
             compatibilityDecisionStatus = decisionStatus,
@@ -510,7 +539,7 @@ class InstallationExecutionGateTest {
             nextAction = when {
                 allComplete -> SimulationNextAction.NO_ACTION_REQUIRED
                 hasSignatureMismatch -> SimulationNextAction.STOP_SIGNATURE_MISMATCH
-                isHarmony5 -> SimulationNextAction.STOP_UNSUPPORTED_SYSTEM
+                isUnsupportedHarmony -> SimulationNextAction.STOP_UNSUPPORTED_SYSTEM
                 needsArtifactVerification -> SimulationNextAction.VERIFY_CURRENT_ARTIFACT
                 else -> SimulationNextAction.REVIEW_SIMULATED_STEPS
             },

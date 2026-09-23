@@ -30,17 +30,32 @@ class GlobalCompatibilityDecisionEngine(
             ),
         )
 
-        if (profile.platformFamily == PlatformFamily.HARMONY_NATIVE) {
+        if (profile.platformFamily == PlatformFamily.HARMONY_NATIVE ||
+            profile.platformFamily == PlatformFamily.HARMONY_VERSION_UNKNOWN
+        ) {
+            val versionUnknown = profile.platformFamily == PlatformFamily.HARMONY_VERSION_UNKNOWN
             return decision(
                 profile = profile,
                 status = CompatibilityDecisionStatus.CURRENT_WORKFLOW_NOT_APPLICABLE,
                 workflow = ApplicableWorkflow.NONE,
-                confidence = DetectionConfidence.HIGH,
+                confidence = if (versionUnknown) {
+                    DetectionConfidence.UNKNOWN
+                } else {
+                    DetectionConfidence.HIGH
+                },
                 evidence = baseEvidence,
                 warnings = listOf(
                     message(
-                        "LEGACY_HARMONY_WORKFLOW_NOT_APPLICABLE",
-                        "HarmonyOS 5+ 不适用 HarmonyOS 1–4 工作流；这不代表设备永远不支持全球应用。",
+                        if (versionUnknown) {
+                            "HARMONY_VERSION_UNKNOWN"
+                        } else {
+                            "LEGACY_HARMONY_WORKFLOW_NOT_APPLICABLE"
+                        },
+                        if (versionUnknown) {
+                            "当前系统版本无法安全识别，暂不执行配置。"
+                        } else {
+                            "当前系统不适用现有 Android 兼容环境工作流；这不代表设备永远不支持全球应用。"
+                        },
                     ),
                 ),
                 nextAction = CompatibilityNextAction.WAIT_FOR_APPLICABLE_WORKFLOW,

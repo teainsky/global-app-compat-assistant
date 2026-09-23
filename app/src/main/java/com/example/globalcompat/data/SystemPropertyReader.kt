@@ -10,7 +10,7 @@ class GetPropSystemPropertyReader : SystemPropertyReader {
             .start()
         val values = process.inputStream.bufferedReader().useLines { lines ->
             lines.mapNotNull(::parseLine)
-                .filter { (key, value) -> key in keys && value.isNotBlank() }
+                .filter { (key, _) -> key in keys }
                 .toMap()
         }
         process.waitFor()

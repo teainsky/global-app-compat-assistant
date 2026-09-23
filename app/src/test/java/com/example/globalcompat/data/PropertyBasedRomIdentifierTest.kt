@@ -116,7 +116,7 @@ class PropertyBasedRomIdentifierTest {
 
     @Test
     fun `identifies HarmonyOS 5_0 5_1 and future major versions as 5 plus`() {
-        listOf("5.0.0", "5.1.0", "6.0.0").forEach { version ->
+        listOf("5.0", "5.1", "6.0", "6.1.0.135").forEach { version ->
             val result = identify(
                 manufacturer = "HUAWEI",
                 brand = "HUAWEI",
@@ -127,6 +127,59 @@ class PropertyBasedRomIdentifierTest {
             assertEquals(RomFamily.HARMONY_OS_5_PLUS, result.family)
             assertEquals(version, result.version)
         }
+    }
+
+    @Test
+    fun `empty HarmonyOS version is explicitly unknown`() {
+        val result = identify(
+            manufacturer = "HUAWEI",
+            brand = "HUAWEI",
+            display = "HarmonyOS",
+            properties = mapOf("hw_sc.build.platform.version" to ""),
+        )
+
+        assertEquals(RomFamily.HARMONY_VERSION_UNKNOWN, result.family)
+        assertNull(result.version)
+        assertEquals(DetectionConfidence.UNKNOWN, result.confidence)
+    }
+
+    @Test
+    fun `unparseable HarmonyOS version is explicitly unknown`() {
+        val result = identify(
+            manufacturer = "HUAWEI",
+            brand = "HUAWEI",
+            properties = mapOf("ro.build.version.harmony" to "not-a-version"),
+        )
+
+        assertEquals(RomFamily.HARMONY_VERSION_UNKNOWN, result.family)
+        assertNull(result.version)
+    }
+
+    @Test
+    fun `conflicting HarmonyOS major properties are explicitly unknown`() {
+        val result = identify(
+            manufacturer = "HUAWEI",
+            brand = "HUAWEI",
+            properties = mapOf(
+                "hw_sc.build.platform.version" to "4.2.0",
+                "ro.build.version.harmony" to "6.1.0.135",
+            ),
+        )
+
+        assertEquals(RomFamily.HARMONY_VERSION_UNKNOWN, result.family)
+        assertNull(result.version)
+    }
+
+    @Test
+    fun `HarmonyOS display without a confirmable major is explicitly unknown`() {
+        val result = identify(
+            manufacturer = "HUAWEI",
+            brand = "HUAWEI",
+            display = "HarmonyOS",
+        )
+
+        assertEquals(RomFamily.HARMONY_VERSION_UNKNOWN, result.family)
+        assertNull(result.version)
     }
 
     private fun identify(

@@ -6,6 +6,7 @@ enum class DeviceCategory {
     CHINA_ANDROID_NO_GMS,
     PARTIAL_GMS,
     HARMONYOS_5_PLUS,
+    HARMONY_VERSION_UNKNOWN,
     UNKNOWN,
 }
 

@@ -12,6 +12,7 @@ import com.example.globalcompat.data.CompatibilityPlanId
 import com.example.globalcompat.data.DeviceCategory
 import com.example.globalcompat.data.GlobalValidationLevel
 import com.example.globalcompat.data.PlatformFamily
+import com.example.globalcompat.data.RomFamily
 import java.security.MessageDigest
 import java.util.UUID
 import javax.crypto.Mac
@@ -83,6 +84,13 @@ internal class InstallAuthorizationIssuer(
     private val authorizationLifetimeMillis: Long = DEFAULT_AUTHORIZATION_LIFETIME_MILLIS,
 ) {
     fun issue(request: InstallAuthorizationIssueRequest): InstallAuthorization {
+        require(
+            request.deviceContext.deviceCategory ==
+                DeviceCategory.HUAWEI_HARMONY_ANDROID_COMPAT &&
+                request.deviceContext.platformFamily == PlatformFamily.HARMONY_ANDROID_COMPAT &&
+                request.deviceContext.romFamily == RomFamily.HARMONY_OS &&
+                request.deviceContext.osVersion.harmonyMajor() in 1..4,
+        ) { "InstallAuthorization is restricted to confirmed HarmonyOS 1-4 profiles" }
         val issuedAt = clock()
         val artifacts = request.artifacts
             .map { artifact ->
@@ -135,6 +143,7 @@ internal enum class AuthorizationRejectionReason {
     EXPIRED,
     DEVICE_PROFILE_CHANGED,
     HARMONYOS_5_PLUS_NOT_SUPPORTED,
+    HARMONY_VERSION_UNKNOWN,
     TRUSTED_CATALOG_UNAVAILABLE,
     CATALOG_ROLLBACK,
     CATALOG_DIGEST_CHANGED,
@@ -172,13 +181,18 @@ internal class AuthorizationRevalidationPolicy(
         if (authorization.issuedAt > now || now >= authorization.expiresAt) {
             return rejected(AuthorizationRejectionReason.EXPIRED)
         }
-        if (!authorization.matches(currentDevice)) {
-            return rejected(AuthorizationRejectionReason.DEVICE_PROFILE_CHANGED)
+        if (currentDevice.deviceCategory == DeviceCategory.HARMONY_VERSION_UNKNOWN ||
+            currentDevice.platformFamily == PlatformFamily.HARMONY_VERSION_UNKNOWN
+        ) {
+            return rejected(AuthorizationRejectionReason.HARMONY_VERSION_UNKNOWN)
         }
         if (currentDevice.deviceCategory == DeviceCategory.HARMONYOS_5_PLUS ||
             currentDevice.platformFamily == PlatformFamily.HARMONY_NATIVE
         ) {
             return rejected(AuthorizationRejectionReason.HARMONYOS_5_PLUS_NOT_SUPPORTED)
+        }
+        if (!authorization.matches(currentDevice)) {
+            return rejected(AuthorizationRejectionReason.DEVICE_PROFILE_CHANGED)
         }
         val snapshot = activeSnapshot
             ?: return rejected(AuthorizationRejectionReason.TRUSTED_CATALOG_UNAVAILABLE)
@@ -424,6 +438,8 @@ private fun String.hexToBytes(): ByteArray? {
 }
 
 private fun String.normalizeDigest(): String = replace(":", "").lowercase()
+
+private fun String.harmonyMajor(): Int? = substringBefore('.').toIntOrNull()
 
 private fun String.isSha256(): Boolean = SHA256.matches(normalizeDigest())
 

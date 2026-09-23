@@ -4,6 +4,7 @@ import com.example.globalcompat.data.CompatibilityPlanId
 import com.example.globalcompat.data.CompatibilityDecisionStatus
 import com.example.globalcompat.data.DeviceCategory
 import com.example.globalcompat.data.GlobalValidationLevel
+import com.example.globalcompat.data.PlatformFamily
 import java.io.File
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -40,6 +41,7 @@ enum class EnvironmentPreparationFailure {
 
 data class EnvironmentPreparationRequest(
     val deviceCategory: DeviceCategory,
+    val platformFamily: PlatformFamily,
     val planId: CompatibilityPlanId,
     val deviceModel: String,
     val systemVersion: String?,

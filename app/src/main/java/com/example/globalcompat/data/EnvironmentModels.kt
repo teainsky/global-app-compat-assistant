@@ -31,6 +31,7 @@ enum class RomFamily {
     MAGIC_OS,
     HARMONY_OS,
     HARMONY_OS_5_PLUS,
+    HARMONY_VERSION_UNKNOWN,
     MY_OS,
     REALME_UI,
     NOTHING_OS,

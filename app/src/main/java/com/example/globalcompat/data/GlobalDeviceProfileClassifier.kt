@@ -45,6 +45,7 @@ class GlobalDeviceProfileClassifier(
             osFamily = when (platformFamily) {
                 PlatformFamily.HARMONY_ANDROID_COMPAT,
                 PlatformFamily.HARMONY_NATIVE,
+                PlatformFamily.HARMONY_VERSION_UNKNOWN,
                 -> OsFamily.HARMONY_OS
                 PlatformFamily.STANDARD_ANDROID,
                 PlatformFamily.ANDROID_DERIVED,
@@ -111,7 +112,12 @@ class GlobalDeviceProfileClassifier(
         rom.family == RomFamily.HARMONY_OS_5_PLUS ||
             rom.family == RomFamily.HARMONY_OS && rom.version.majorVersion()?.let { it >= 5 } == true ->
             PlatformFamily.HARMONY_NATIVE
-        rom.family == RomFamily.HARMONY_OS -> PlatformFamily.HARMONY_ANDROID_COMPAT
+        rom.family == RomFamily.HARMONY_OS &&
+            rom.version.majorVersion()?.let { it in 1..4 } == true ->
+            PlatformFamily.HARMONY_ANDROID_COMPAT
+        rom.family == RomFamily.HARMONY_VERSION_UNKNOWN ||
+            rom.family == RomFamily.HARMONY_OS ->
+            PlatformFamily.HARMONY_VERSION_UNKNOWN
         rom.family == RomFamily.UNKNOWN -> PlatformFamily.UNKNOWN
         rom.family in STANDARD_ANDROID_ROMS -> PlatformFamily.STANDARD_ANDROID
         else -> PlatformFamily.ANDROID_DERIVED
@@ -199,6 +205,7 @@ class GlobalDeviceProfileClassifier(
         return when {
             exactVerifiedRecord != null -> GlobalValidationLevel.DEVICE_VERIFIED
             trustedEnvironmentVerified -> GlobalValidationLevel.ENVIRONMENT_VERIFIED
+            rom.family == RomFamily.HARMONY_VERSION_UNKNOWN -> GlobalValidationLevel.UNKNOWN
             oemKnown && rom.family != RomFamily.UNKNOWN -> GlobalValidationLevel.PROBABLE
             else -> GlobalValidationLevel.UNKNOWN
         }
@@ -242,6 +249,7 @@ class GlobalDeviceProfileClassifier(
         PlatformFamily.HARMONY_ANDROID_COMPAT ->
             InstallationCapability.LEGACY_HARMONY_COMPATIBLE
         PlatformFamily.HARMONY_NATIVE -> InstallationCapability.NOT_APPLICABLE
+        PlatformFamily.HARMONY_VERSION_UNKNOWN -> InstallationCapability.NOT_APPLICABLE
         else -> if (androidApiLevel > 0) {
             InstallationCapability.USER_CONFIRMED_PACKAGE_INSTALL
         } else {
@@ -258,6 +266,7 @@ class GlobalDeviceProfileClassifier(
     private fun RomFamily.catalogRomFamily(): String = when (this) {
         RomFamily.HARMONY_OS,
         RomFamily.HARMONY_OS_5_PLUS,
+        RomFamily.HARMONY_VERSION_UNKNOWN,
         -> "HARMONY_OS"
         else -> name
     }
@@ -267,6 +276,7 @@ class GlobalDeviceProfileClassifier(
         val HARMONY_PLATFORMS = setOf(
             PlatformFamily.HARMONY_ANDROID_COMPAT,
             PlatformFamily.HARMONY_NATIVE,
+            PlatformFamily.HARMONY_VERSION_UNKNOWN,
         )
         val STANDARD_ANDROID_ROMS = setOf(
             RomFamily.AOSP,

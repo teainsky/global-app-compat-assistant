@@ -59,17 +59,28 @@ class RuleBasedCompatibilityPlanMatcher(
         val matchedDeviceRule = matchingDeviceRule(context)
 
         if (context.deviceProfile.platformFamily == PlatformFamily.HARMONY_NATIVE ||
+            context.deviceProfile.platformFamily == PlatformFamily.HARMONY_VERSION_UNKNOWN ||
             matchedDeviceRule?.deviceCategory == DeviceCategory.HARMONYOS_5_PLUS
         ) {
+            val versionUnknown = context.deviceProfile.platformFamily ==
+                PlatformFamily.HARMONY_VERSION_UNKNOWN
             return plan(
-                category = DeviceCategory.HARMONYOS_5_PLUS,
+                category = if (versionUnknown) {
+                    DeviceCategory.HARMONY_VERSION_UNKNOWN
+                } else {
+                    DeviceCategory.HARMONYOS_5_PLUS
+                },
                 planId = CompatibilityPlanId.UNSUPPORTED_OR_UNKNOWN,
                 status = CompatibilityPlanStatus.UNSUPPORTED,
                 evidence = baseEvidence,
                 warnings = listOf(
                     warning(
                         CompatibilityWarningCode.INSTALL_WORKFLOW_NOT_APPLICABLE,
-                        "HarmonyOS 5+ 不进入 HarmonyOS 1–4 的 Android 兼容安装流程。",
+                        if (versionUnknown) {
+                            "当前系统版本无法安全识别，暂不执行配置。"
+                        } else {
+                            "当前系统不适用现有 Android 兼容环境工作流。"
+                        },
                     ),
                 ),
                 confidence = context.rom.confidence,

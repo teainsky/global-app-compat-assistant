@@ -18,6 +18,7 @@ import com.example.globalcompat.catalog.TrustedComponentCatalogMatcher
 import com.example.globalcompat.data.CompatibilityPlanId
 import com.example.globalcompat.data.DeviceCategory
 import com.example.globalcompat.data.EnvironmentReport
+import com.example.globalcompat.data.PlatformFamily
 import com.example.globalcompat.data.RomFamily
 
 class SimulatedInstallationPlanner(
@@ -42,12 +43,23 @@ class SimulatedInstallationPlanner(
         val plan = environment.compatibilityPlan
 
         if (plan.deviceCategory == DeviceCategory.HARMONYOS_5_PLUS ||
-            environment.rom.family == RomFamily.HARMONY_OS_5_PLUS
+            plan.deviceCategory == DeviceCategory.HARMONY_VERSION_UNKNOWN ||
+            environment.deviceProfile.platformFamily == PlatformFamily.HARMONY_NATIVE ||
+            environment.deviceProfile.platformFamily == PlatformFamily.HARMONY_VERSION_UNKNOWN ||
+            environment.rom.family == RomFamily.HARMONY_OS_5_PLUS ||
+            environment.rom.family == RomFamily.HARMONY_VERSION_UNKNOWN
         ) {
+            val versionUnknown = plan.deviceCategory == DeviceCategory.HARMONY_VERSION_UNKNOWN ||
+                environment.deviceProfile.platformFamily == PlatformFamily.HARMONY_VERSION_UNKNOWN ||
+                environment.rom.family == RomFamily.HARMONY_VERSION_UNKNOWN
             stages += stage(
                 SimulationFlowStage.PLAN_MATCHING,
                 SimulationStageStatus.BLOCKED,
-                "HarmonyOS 5+ 不适用 HarmonyOS 1–4 的兼容方案。",
+                if (versionUnknown) {
+                    "当前系统版本无法安全识别，暂不执行配置。"
+                } else {
+                    "当前系统不适用现有 Android 兼容环境工作流。"
+                },
             )
             return result(
                 environment = environment,
