@@ -9,6 +9,7 @@ import com.example.globalcompat.data.CompatibilityDecisionStatus
 import com.example.globalcompat.data.DeviceCategory
 import com.example.globalcompat.data.GlobalValidationLevel
 import com.example.globalcompat.data.PlatformFamily
+import com.example.globalcompat.data.RuntimeEnvironment
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -149,6 +150,23 @@ class EnvironmentPreparationCoordinatorTest {
         )
 
         assertFailed(result, EnvironmentPreparationFailure.DEVICE_BRANCH_NOT_ALLOWED, fixture.directory)
+        assertEquals(0, fixture.transport.calls)
+    }
+
+    @Test
+    fun `third party compatibility runtime never downloads legacy Huawei artifacts`() {
+        val fixture = fixture()
+        val result = fixture.coordinator.prepare(
+            EXACT_VERIFIED_REQUEST.copy(
+                runtimeEnvironment = RuntimeEnvironment.THIRD_PARTY_COMPAT_RUNTIME,
+            ),
+        )
+
+        assertFailed(
+            result,
+            EnvironmentPreparationFailure.THIRD_PARTY_COMPAT_RUNTIME_NOT_ALLOWED,
+            fixture.directory,
+        )
         assertEquals(0, fixture.transport.calls)
     }
 
@@ -349,6 +367,7 @@ class EnvironmentPreparationCoordinatorTest {
         val HARMONY_42_REQUEST = EnvironmentPreparationRequest(
             deviceCategory = DeviceCategory.HUAWEI_HARMONY_ANDROID_COMPAT,
             platformFamily = PlatformFamily.HARMONY_ANDROID_COMPAT,
+            runtimeEnvironment = RuntimeEnvironment.HARMONY_ANDROID_COMPAT,
             planId = CompatibilityPlanId.HUAWEI_MICROG_COMPAT_PLAN,
             deviceModel = "Huawei Pura 70 Pro+",
             systemVersion = "4.2",

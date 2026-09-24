@@ -20,10 +20,20 @@ class GlobalDeviceProfileClassifier(
         marketVariant: MarketVariant = MarketVariant.UNKNOWN,
         compatibilityLayerConfirmed: Boolean = false,
         trustedEnvironmentVerified: Boolean = false,
+        runtimeEnvironment: RuntimeEnvironmentDetection = RuntimeEnvironmentDetection(
+            environment = defaultRuntimeEnvironment(rom, android),
+            evidence = emptyList(),
+        ),
     ): DeviceProfile {
         val oem = oemRegistry.resolve(device.manufacturer, device.brand)
         val platformFamily = platformFamily(rom)
-        val exactVerifiedRecord = exactVerifiedRecord(device, android, rom)
+        val exactVerifiedRecord = if (
+            runtimeEnvironment.environment != RuntimeEnvironment.THIRD_PARTY_COMPAT_RUNTIME
+        ) {
+            exactVerifiedRecord(device, android, rom)
+        } else {
+            null
+        }
         val googleEnvironmentAssessment = googleEnvironmentAssessment(
             components = components,
             compatibilityLayerConfirmed = compatibilityLayerConfirmed,
@@ -42,6 +52,7 @@ class GlobalDeviceProfileClassifier(
             deviceFamily = device.model.takeIf(String::isNotBlank) ?: UNKNOWN_VALUE,
             marketVariant = marketVariant,
             platformFamily = platformFamily,
+            runtimeEnvironment = runtimeEnvironment.environment,
             osFamily = when (platformFamily) {
                 PlatformFamily.HARMONY_ANDROID_COMPAT,
                 PlatformFamily.HARMONY_NATIVE,
@@ -61,7 +72,11 @@ class GlobalDeviceProfileClassifier(
             romFamily = rom.family,
             romVersion = rom.version,
             googleEnvironmentAssessment = googleEnvironmentAssessment,
-            installationCapability = installationCapability(platformFamily, android.apiLevel),
+            installationCapability = installationCapability(
+                platformFamily,
+                android.apiLevel,
+                runtimeEnvironment.environment,
+            ),
             validationLevel = validationLevel,
             evidence = buildList {
                 add(DetectionEvidence("market.variant", marketVariant.name))
@@ -72,6 +87,8 @@ class GlobalDeviceProfileClassifier(
                     ),
                 )
                 add(DetectionEvidence("platform.family", platformFamily.name))
+                add(DetectionEvidence("runtime.environment", runtimeEnvironment.environment.name))
+                addAll(runtimeEnvironment.evidence)
                 add(
                     DetectionEvidence(
                         "google.component_set_state",
@@ -245,15 +262,21 @@ class GlobalDeviceProfileClassifier(
     private fun installationCapability(
         platformFamily: PlatformFamily,
         androidApiLevel: Int,
-    ): InstallationCapability = when (platformFamily) {
-        PlatformFamily.HARMONY_ANDROID_COMPAT ->
-            InstallationCapability.LEGACY_HARMONY_COMPATIBLE
-        PlatformFamily.HARMONY_NATIVE -> InstallationCapability.NOT_APPLICABLE
-        PlatformFamily.HARMONY_VERSION_UNKNOWN -> InstallationCapability.NOT_APPLICABLE
-        else -> if (androidApiLevel > 0) {
-            InstallationCapability.USER_CONFIRMED_PACKAGE_INSTALL
-        } else {
-            InstallationCapability.UNKNOWN
+        runtimeEnvironment: RuntimeEnvironment,
+    ): InstallationCapability {
+        if (runtimeEnvironment == RuntimeEnvironment.THIRD_PARTY_COMPAT_RUNTIME) {
+            return InstallationCapability.NOT_APPLICABLE
+        }
+        return when (platformFamily) {
+            PlatformFamily.HARMONY_ANDROID_COMPAT ->
+                InstallationCapability.LEGACY_HARMONY_COMPATIBLE
+            PlatformFamily.HARMONY_NATIVE -> InstallationCapability.NOT_APPLICABLE
+            PlatformFamily.HARMONY_VERSION_UNKNOWN -> InstallationCapability.NOT_APPLICABLE
+            else -> if (androidApiLevel > 0) {
+                InstallationCapability.USER_CONFIRMED_PACKAGE_INSTALL
+            } else {
+                InstallationCapability.UNKNOWN
+            }
         }
     }
 
@@ -291,5 +314,18 @@ class GlobalDeviceProfileClassifier(
             ComponentId.GOOGLE_PLAY_SERVICES,
             ComponentId.GOOGLE_PLAY_STORE,
         )
+
+        fun defaultRuntimeEnvironment(
+            rom: RomIdentification,
+            android: AndroidPlatform,
+        ): RuntimeEnvironment = when {
+            rom.family == RomFamily.HARMONY_OS &&
+                rom.version?.let { VERSION_NUMBER.find(it)?.value?.toIntOrNull() in 1..4 } == true ->
+                RuntimeEnvironment.HARMONY_ANDROID_COMPAT
+            rom.family == RomFamily.HARMONY_OS_5_PLUS ||
+                rom.family == RomFamily.HARMONY_VERSION_UNKNOWN -> RuntimeEnvironment.UNKNOWN
+            android.apiLevel > 0 -> RuntimeEnvironment.NATIVE_ANDROID
+            else -> RuntimeEnvironment.UNKNOWN
+        }
     }
 }

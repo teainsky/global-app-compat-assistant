@@ -18,6 +18,10 @@ class DeviceEnvironmentScanner(
         RuleBasedCompatibilityPlanMatcher(catalogSnapshot),
     private val deviceProfileClassifier: GlobalDeviceProfileClassifier =
         GlobalDeviceProfileClassifier(catalogSnapshot = catalogSnapshot),
+    private val runtimeEnvironmentDetector: RuntimeEnvironmentDetector =
+        EvidenceBasedRuntimeEnvironmentDetector(),
+    private val thirdPartyRuntimeEvidenceProvider: ThirdPartyRuntimeEvidenceProvider =
+        AndroidThirdPartyRuntimeEvidenceProvider(context.applicationContext),
     private val compatibilityDecisionEngine: GlobalCompatibilityDecisionEngine =
         GlobalCompatibilityDecisionEngine(catalogSnapshot),
     private val clock: () -> Long = System::currentTimeMillis,
@@ -41,12 +45,21 @@ class DeviceEnvironmentScanner(
             buildIncremental = Build.VERSION.INCREMENTAL.orEmpty(),
             fingerprint = Build.FINGERPRINT.orEmpty(),
         )
+        val properties = propertyReader.read(PropertyBasedRomIdentifier.PROPERTY_KEYS)
         val rom = romIdentifier.identify(
             RomProbe(
                 manufacturer = device.manufacturer,
                 brand = device.brand,
                 buildDisplay = android.buildDisplay,
-                properties = propertyReader.read(PropertyBasedRomIdentifier.PROPERTY_KEYS),
+                properties = properties,
+            ),
+        )
+        val runtimeEnvironment = runtimeEnvironmentDetector.detect(
+            RuntimeEnvironmentProbe(
+                android = android,
+                rom = rom,
+                properties = properties,
+                trustedThirdPartyEvidence = thirdPartyRuntimeEvidenceProvider.read(),
             ),
         )
         val components = componentScanner.scan()
@@ -56,6 +69,7 @@ class DeviceEnvironmentScanner(
             android = android,
             rom = rom,
             components = components,
+            runtimeEnvironment = runtimeEnvironment,
         )
         val compatibilityDecision = compatibilityDecisionEngine.decide(deviceProfile)
         val compatibilityPlan = compatibilityPlanMatcher.match(

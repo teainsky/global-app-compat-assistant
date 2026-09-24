@@ -24,6 +24,25 @@ class GlobalDeviceProfileClassifierTest {
         assertEquals(GlobalValidationLevel.DEVICE_VERIFIED, profile.validationLevel)
         assertEquals(MarketVariant.UNKNOWN, profile.marketVariant)
         assertEquals("HBN-AL80", profile.deviceFamily)
+        assertEquals(RuntimeEnvironment.HARMONY_ANDROID_COMPAT, profile.runtimeEnvironment)
+    }
+
+    @Test
+    fun `third party runtime cannot inherit exact HBN device verification`() {
+        val profile = profile(
+            manufacturer = "HUAWEI",
+            brand = "HUAWEI",
+            model = "HBN-AL80",
+            romFamily = RomFamily.HARMONY_OS,
+            romVersion = "4.2.0",
+            apiLevel = 31,
+            components = googleComponents(present = true, officialVersions = true),
+            runtimeEnvironment = RuntimeEnvironment.THIRD_PARTY_COMPAT_RUNTIME,
+        )
+
+        assertEquals(RuntimeEnvironment.THIRD_PARTY_COMPAT_RUNTIME, profile.runtimeEnvironment)
+        assertEquals(InstallationCapability.NOT_APPLICABLE, profile.installationCapability)
+        assertFalse(profile.validationLevel == GlobalValidationLevel.DEVICE_VERIFIED)
     }
 
     @Test
@@ -247,6 +266,7 @@ class GlobalDeviceProfileClassifierTest {
         apiLevel: Int = 34,
         marketVariant: MarketVariant = MarketVariant.UNKNOWN,
         components: List<SystemComponent>,
+        runtimeEnvironment: RuntimeEnvironment? = null,
     ): DeviceProfile {
         val device = DeviceIdentity(
             brand = brand,
@@ -277,7 +297,24 @@ class GlobalDeviceProfileClassifierTest {
             },
             evidence = listOf(DetectionEvidence("test.rom", romFamily.name)),
         )
-        return classifier.classify(device, android, rom, components, marketVariant)
+        return classifier.classify(
+            device = device,
+            android = android,
+            rom = rom,
+            components = components,
+            marketVariant = marketVariant,
+            runtimeEnvironment = RuntimeEnvironmentDetection(
+                environment = runtimeEnvironment ?: when {
+                    romFamily == RomFamily.HARMONY_OS ->
+                        RuntimeEnvironment.HARMONY_ANDROID_COMPAT
+                    romFamily == RomFamily.HARMONY_OS_5_PLUS ||
+                        romFamily == RomFamily.HARMONY_VERSION_UNKNOWN ->
+                        RuntimeEnvironment.UNKNOWN
+                    else -> RuntimeEnvironment.NATIVE_ANDROID
+                },
+                evidence = emptyList(),
+            ),
+        )
     }
 
     private fun googleComponents(

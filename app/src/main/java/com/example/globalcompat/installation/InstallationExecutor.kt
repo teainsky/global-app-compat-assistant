@@ -3,6 +3,7 @@ package com.example.globalcompat.installation
 import com.example.globalcompat.catalog.TrustedCatalogSnapshotProvider
 import com.example.globalcompat.data.DeviceCategory
 import com.example.globalcompat.data.PlatformFamily
+import com.example.globalcompat.data.RuntimeEnvironment
 import com.example.globalcompat.preparation.EnvironmentPreparationStatus
 import java.io.File
 import java.util.UUID
@@ -34,6 +35,13 @@ internal class InstallationExecutor(
                 currentDevice,
                 InstallationExecutionFailure.HARMONY_VERSION_UNKNOWN,
                 "当前系统版本无法安全识别，暂不执行配置",
+            )
+        }
+        if (currentDevice.runtimeEnvironment == RuntimeEnvironment.THIRD_PARTY_COMPAT_RUNTIME) {
+            return blocked(
+                currentDevice,
+                InstallationExecutionFailure.THIRD_PARTY_COMPAT_RUNTIME_NOT_ALLOWED,
+                "第三方兼容运行环境不能进入旧鸿蒙安装流程",
             )
         }
         if (currentDevice.deviceCategory == DeviceCategory.HARMONYOS_5_PLUS ||

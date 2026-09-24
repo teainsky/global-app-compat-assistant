@@ -56,6 +56,22 @@ class GlobalCompatibilityDecisionEngineTest {
     }
 
     @Test
+    fun `third party compatibility runtime is diagnostic only even when guest mimics HBN`() {
+        val decision = engine.decide(
+            hbnProfile(presenceOnly()).copy(
+                runtimeEnvironment = RuntimeEnvironment.THIRD_PARTY_COMPAT_RUNTIME,
+                installationCapability = InstallationCapability.NOT_APPLICABLE,
+                validationLevel = GlobalValidationLevel.UNKNOWN,
+            ),
+        )
+
+        assertDiagnosticOnly(decision)
+        assertTrue(decision.warnings.any {
+            it.code == "THIRD_PARTY_COMPAT_RUNTIME_DIAGNOSTIC_ONLY"
+        })
+    }
+
+    @Test
     fun `package presence alone on Pixel Samsung and Xiaomi Global is diagnostic only`() {
         listOf(
             profile("Google", "Pixel 9", RomFamily.PIXEL_ANDROID, MarketVariant.GLOBAL),
@@ -322,6 +338,7 @@ class GlobalCompatibilityDecisionEngineTest {
         deviceFamily = "HBN-AL80",
         marketVariant = MarketVariant.UNKNOWN,
         platformFamily = PlatformFamily.HARMONY_ANDROID_COMPAT,
+        runtimeEnvironment = RuntimeEnvironment.HARMONY_ANDROID_COMPAT,
         osFamily = OsFamily.HARMONY_OS,
         osVersion = "4.2.0",
         androidApiLevel = 31,

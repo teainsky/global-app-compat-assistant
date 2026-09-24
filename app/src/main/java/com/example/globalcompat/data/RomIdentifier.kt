@@ -255,6 +255,8 @@ class PropertyBasedRomIdentifier : RomIdentifier {
         private val HARMONY_VERSION_IN_DISPLAY = Regex("(?i)harmony\\s*os\\s*(\\d+(?:\\.\\d+)*)")
 
         val PROPERTY_KEYS = setOf(
+            "const.ohos.fullname",
+            "const.product.software.version",
             "hw_sc.build.platform.version",
             "ro.build.version.harmony",
             "ro.huawei.build.version.emui",

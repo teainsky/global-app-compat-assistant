@@ -18,6 +18,7 @@ import com.example.globalcompat.data.DeviceCategory
 import com.example.globalcompat.data.GlobalValidationLevel
 import com.example.globalcompat.data.PlatformFamily
 import com.example.globalcompat.data.RomFamily
+import com.example.globalcompat.data.RuntimeEnvironment
 import com.example.globalcompat.simulation.CurrentComponentState
 import com.example.globalcompat.simulation.SimulatedArtifact
 import com.example.globalcompat.simulation.SimulatedInstallationPlan
@@ -51,6 +52,12 @@ internal class InstallationExecutionGate(
             return blockedPlan(
                 simulatedPlan,
                 listOf(InstallationBlockReason.CATALOG_SNAPSHOT_MISMATCH),
+            )
+        }
+        if (simulatedPlan.runtimeEnvironment == RuntimeEnvironment.THIRD_PARTY_COMPAT_RUNTIME) {
+            return blockedPlan(
+                simulatedPlan,
+                listOf(InstallationBlockReason.THIRD_PARTY_COMPAT_RUNTIME_NOT_ALLOWED),
             )
         }
         if (simulatedPlan.deviceCategory == DeviceCategory.HARMONY_VERSION_UNKNOWN ||
@@ -286,6 +293,7 @@ internal class InstallationExecutionGate(
             manufacturer = "Huawei",
             model = deviceModel,
             platformFamily = platformFamily,
+            runtimeEnvironment = runtimeEnvironment,
             osVersion = systemVersion,
             androidApiLevel = androidApiLevel,
             romFamily = RomFamily.HARMONY_OS,

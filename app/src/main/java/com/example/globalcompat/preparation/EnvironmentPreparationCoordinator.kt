@@ -17,6 +17,7 @@ import com.example.globalcompat.data.CompatibilityDecisionStatus
 import com.example.globalcompat.data.DeviceCategory
 import com.example.globalcompat.data.GlobalValidationLevel
 import com.example.globalcompat.data.PlatformFamily
+import com.example.globalcompat.data.RuntimeEnvironment
 import java.io.File
 import java.io.IOException
 import java.net.URI
@@ -252,6 +253,12 @@ class EnvironmentPreparationCoordinator(
             )
         }
         val catalog = snapshot.catalog
+        if (request.runtimeEnvironment == RuntimeEnvironment.THIRD_PARTY_COMPAT_RUNTIME) {
+            return SelectionResult.Rejected(
+                EnvironmentPreparationFailure.THIRD_PARTY_COMPAT_RUNTIME_NOT_ALLOWED,
+                "Third-party compatibility runtimes cannot download legacy Huawei components",
+            )
+        }
         if (request.platformFamily != PlatformFamily.HARMONY_ANDROID_COMPAT ||
             request.deviceCategory == DeviceCategory.HARMONYOS_5_PLUS ||
             request.deviceCategory == DeviceCategory.HARMONY_VERSION_UNKNOWN ||

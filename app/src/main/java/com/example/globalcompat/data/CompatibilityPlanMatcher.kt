@@ -58,6 +58,24 @@ class RuleBasedCompatibilityPlanMatcher(
 
         val matchedDeviceRule = matchingDeviceRule(context)
 
+        if (context.deviceProfile.runtimeEnvironment ==
+            RuntimeEnvironment.THIRD_PARTY_COMPAT_RUNTIME
+        ) {
+            return plan(
+                category = DeviceCategory.UNKNOWN,
+                planId = CompatibilityPlanId.UNSUPPORTED_OR_UNKNOWN,
+                status = CompatibilityPlanStatus.UNDETERMINED,
+                evidence = baseEvidence,
+                warnings = listOf(
+                    warning(
+                        CompatibilityWarningCode.INSTALL_WORKFLOW_NOT_APPLICABLE,
+                        "当前应用运行在兼容环境中，仅允许检测和基础诊断。",
+                    ),
+                ),
+                confidence = DetectionConfidence.HIGH,
+            )
+        }
+
         if (context.deviceProfile.platformFamily == PlatformFamily.HARMONY_NATIVE ||
             context.deviceProfile.platformFamily == PlatformFamily.HARMONY_VERSION_UNKNOWN ||
             matchedDeviceRule?.deviceCategory == DeviceCategory.HARMONYOS_5_PLUS
@@ -108,7 +126,9 @@ class RuleBasedCompatibilityPlanMatcher(
         val hasPlayServices = playServices.isUsable()
         val hasPlayStore = playStore.isUsable()
 
-        if (context.deviceProfile.platformFamily == PlatformFamily.HARMONY_ANDROID_COMPAT &&
+        if (context.deviceProfile.runtimeEnvironment ==
+            RuntimeEnvironment.HARMONY_ANDROID_COMPAT &&
+            context.deviceProfile.platformFamily == PlatformFamily.HARMONY_ANDROID_COMPAT &&
             matchedDeviceRule?.deviceCategory == DeviceCategory.HUAWEI_HARMONY_ANDROID_COMPAT
         ) {
             val partialWarning = if (hasPlayServices || hasPlayStore) {

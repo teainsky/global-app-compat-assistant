@@ -33,6 +33,7 @@ import com.example.globalcompat.data.InstallationCapability
 import com.example.globalcompat.data.MarketVariant
 import com.example.globalcompat.data.OsFamily
 import com.example.globalcompat.data.PlatformFamily
+import com.example.globalcompat.data.RuntimeEnvironment
 import com.example.globalcompat.data.PlayCertification
 import com.example.globalcompat.data.RomFamily
 import com.example.globalcompat.data.RomIdentification
@@ -240,6 +241,7 @@ class DeviceBaselineTest {
         assertTrue(json.contains("\"officialApkSha256\""))
         assertTrue(json.contains("\"artifactMatchStatus\": \"ACTUAL_ARTIFACT_MATCH\""))
         assertTrue(json.contains("\"attainedEvidenceLevel\": \"ARTIFACT_VERIFIED\""))
+        assertTrue(json.contains("\"runtimeEnvironment\": \"HARMONY_ANDROID_COMPAT\""))
         assertFalse(json.contains("\"attainedEvidenceLevel\": \"DEVICE_VERIFIED\""))
     }
 
@@ -456,6 +458,7 @@ class DeviceBaselineTest {
             deviceFamily = "Huawei Pura 70 Pro+",
             marketVariant = MarketVariant.UNKNOWN,
             platformFamily = PlatformFamily.HARMONY_ANDROID_COMPAT,
+            runtimeEnvironment = RuntimeEnvironment.HARMONY_ANDROID_COMPAT,
             osFamily = OsFamily.HARMONY_OS,
             osVersion = "4.2",
             androidApiLevel = 31,

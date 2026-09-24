@@ -24,11 +24,13 @@ class FreeMvpCoveragePolicy {
     ): FreeMvpCoverage {
         val verifiedConfigurationAvailable =
             profile.validationLevel == GlobalValidationLevel.DEVICE_VERIFIED &&
+                profile.runtimeEnvironment == RuntimeEnvironment.HARMONY_ANDROID_COMPAT &&
                 profile.platformFamily == PlatformFamily.HARMONY_ANDROID_COMPAT &&
                 verifiedWorkflow == ApplicableWorkflow.HUAWEI_MICROG_COMPAT
         val configurationStatus = when {
             verifiedConfigurationAvailable -> FreeMvpConfigurationStatus.VERIFIED_AVAILABLE
-            profile.platformFamily == PlatformFamily.HARMONY_NATIVE ||
+            profile.runtimeEnvironment == RuntimeEnvironment.THIRD_PARTY_COMPAT_RUNTIME ||
+                profile.platformFamily == PlatformFamily.HARMONY_NATIVE ||
                 profile.platformFamily == PlatformFamily.HARMONY_VERSION_UNKNOWN ->
                 FreeMvpConfigurationStatus.WORKFLOW_NOT_APPLICABLE
             else -> FreeMvpConfigurationStatus.NOT_VERIFIED

@@ -26,6 +26,7 @@ class DeviceBaselineReportFactory {
             model = environment.device.model,
         )
         val system = BaselineSystemInfo(
+            runtimeEnvironment = environment.deviceProfile.runtimeEnvironment.name,
             harmonyOsVersion = environment.rom.version.takeIf {
                 environment.rom.family == RomFamily.HARMONY_OS ||
                     environment.rom.family == RomFamily.HARMONY_OS_5_PLUS

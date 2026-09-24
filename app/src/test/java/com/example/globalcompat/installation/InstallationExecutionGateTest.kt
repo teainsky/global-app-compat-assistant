@@ -11,6 +11,7 @@ import com.example.globalcompat.data.CompatibilityDecisionStatus
 import com.example.globalcompat.data.DeviceCategory
 import com.example.globalcompat.data.GlobalValidationLevel
 import com.example.globalcompat.data.PlatformFamily
+import com.example.globalcompat.data.RuntimeEnvironment
 import com.example.globalcompat.simulation.CurrentComponentDecision
 import com.example.globalcompat.simulation.CurrentComponentState
 import com.example.globalcompat.simulation.SimulatedArtifact
@@ -274,6 +275,27 @@ class InstallationExecutionGateTest {
     }
 
     @Test
+    fun `third party compatibility runtime cannot receive install authorization`() {
+        val plan = simulatedPlan(
+            catalog = deviceVerifiedCatalog(),
+            states = mapOf(
+                GMS_COMPONENT_ID to CurrentComponentState.NOT_INSTALLED,
+                VENDING_COMPONENT_ID to CurrentComponentState.NOT_INSTALLED,
+            ),
+        ).copy(runtimeEnvironment = RuntimeEnvironment.THIRD_PARTY_COMPAT_RUNTIME)
+
+        val result = InstallationExecutionGate(deviceVerifiedCatalog()).evaluate(plan)
+
+        assertEquals(InstallationSessionStatus.BLOCKED, result.status)
+        assertFalse(result.executionAllowed)
+        assertEquals(null, result.authorization)
+        assertTrue(
+            InstallationBlockReason.THIRD_PARTY_COMPAT_RUNTIME_NOT_ALLOWED in
+                result.blockReasons,
+        )
+    }
+
+    @Test
     fun `missing download evidence fails closed`() {
         val catalog = deviceVerifiedCatalog()
         val plan = simulatedPlan(
@@ -523,6 +545,12 @@ class InstallationExecutionGateTest {
                 DeviceCategory.HARMONYOS_5_PLUS -> PlatformFamily.HARMONY_NATIVE
                 DeviceCategory.HARMONY_VERSION_UNKNOWN -> PlatformFamily.HARMONY_VERSION_UNKNOWN
                 else -> PlatformFamily.HARMONY_ANDROID_COMPAT
+            },
+            runtimeEnvironment = when (category) {
+                DeviceCategory.HARMONYOS_5_PLUS,
+                DeviceCategory.HARMONY_VERSION_UNKNOWN,
+                -> RuntimeEnvironment.UNKNOWN
+                else -> RuntimeEnvironment.HARMONY_ANDROID_COMPAT
             },
             systemVersion = when (category) {
                 DeviceCategory.HARMONYOS_5_PLUS -> "5.0"

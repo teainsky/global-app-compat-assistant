@@ -5,6 +5,7 @@ import com.example.globalcompat.data.CompatibilityDecisionStatus
 import com.example.globalcompat.data.DeviceCategory
 import com.example.globalcompat.data.GlobalValidationLevel
 import com.example.globalcompat.data.PlatformFamily
+import com.example.globalcompat.data.RuntimeEnvironment
 import java.io.File
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -28,6 +29,7 @@ enum class EnvironmentPreparationStage {
 enum class EnvironmentPreparationFailure {
     CATALOG_NOT_TRUSTED,
     DEVICE_BRANCH_NOT_ALLOWED,
+    THIRD_PARTY_COMPAT_RUNTIME_NOT_ALLOWED,
     OFFICIAL_SOURCE_UNAVAILABLE,
     CATALOG_METADATA_INVALID,
     NETWORK_FAILED,
@@ -42,6 +44,7 @@ enum class EnvironmentPreparationFailure {
 data class EnvironmentPreparationRequest(
     val deviceCategory: DeviceCategory,
     val platformFamily: PlatformFamily,
+    val runtimeEnvironment: RuntimeEnvironment,
     val planId: CompatibilityPlanId,
     val deviceModel: String,
     val systemVersion: String?,

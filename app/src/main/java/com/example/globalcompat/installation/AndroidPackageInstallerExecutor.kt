@@ -76,6 +76,7 @@ internal class AndroidInstallationDeviceContextProvider(
             manufacturer = report.device.manufacturer,
             model = report.deviceProfile.model,
             platformFamily = report.deviceProfile.platformFamily,
+            runtimeEnvironment = report.deviceProfile.runtimeEnvironment,
             osVersion = report.deviceProfile.osVersion,
             androidApiLevel = report.deviceProfile.androidApiLevel,
             romFamily = report.rom.family,

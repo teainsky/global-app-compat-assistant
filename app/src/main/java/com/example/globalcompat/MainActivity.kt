@@ -58,6 +58,7 @@ import com.example.globalcompat.data.DeviceProfile
 import com.example.globalcompat.data.FreeMvpCapability
 import com.example.globalcompat.data.FreeMvpConfigurationStatus
 import com.example.globalcompat.data.PlatformFamily
+import com.example.globalcompat.data.RuntimeEnvironment
 import com.example.globalcompat.data.SystemComponent
 import com.example.globalcompat.installation.InstallationBlockReason
 import com.example.globalcompat.installation.InstallationSessionPlan
@@ -161,6 +162,8 @@ private fun ScannerScreen(scanner: DeviceBaselineScanner) {
                                 request = EnvironmentPreparationRequest(
                                     deviceCategory = result.environment.compatibilityPlan.deviceCategory,
                                     platformFamily = result.environment.deviceProfile.platformFamily,
+                                    runtimeEnvironment =
+                                        result.environment.deviceProfile.runtimeEnvironment,
                                     planId = result.environment.compatibilityPlan.planId,
                                     deviceModel = result.environment.device.model,
                                     systemVersion = result.environment.rom.version,
@@ -273,6 +276,17 @@ private fun EnvironmentReportView(
                     .joinToString(" "))
                 ReportRow("系统", report.rom.displayName)
                 ReportRow("Google 环境", report.compatibilityDecision.userSummary())
+            }
+        }
+        if (report.deviceProfile.runtimeEnvironment ==
+            RuntimeEnvironment.THIRD_PARTY_COMPAT_RUNTIME
+        ) {
+            item {
+                ReportSection("兼容环境提示") {
+                    Text(
+                        "当前应用运行在兼容环境中，检测结果代表该兼容环境，不代表手机原生系统。",
+                    )
+                }
             }
         }
         item {
@@ -415,6 +429,7 @@ private fun TechnicalDetailsCard(scanResult: DeviceBaselineScanResult) {
             ReportRow("ROM", report.rom.displayName)
             ReportRow("ROM 版本", report.rom.version ?: "未识别")
             ReportRow("平台分类", report.deviceProfile.platformFamily.name)
+            ReportRow("运行环境", report.deviceProfile.runtimeEnvironment.name)
             ReportRow("验证等级", report.deviceProfile.validationLevel.name)
             ReportRow("决策", report.compatibilityDecision.decisionStatus.name)
             ReportRow("适用流程", report.compatibilityDecision.applicableWorkflow.name)
@@ -1071,6 +1086,9 @@ private fun UserValidationSection(
     val allPassed = validation.googleAccountLogin == UserValidationAnswer.YES &&
         validation.chatGptLoginAndUse == UserValidationAnswer.YES &&
         validation.chromeGoogleLogin == UserValidationAnswer.YES
+    val anyFailed = validation.googleAccountLogin == UserValidationAnswer.NO ||
+        validation.chatGptLoginAndUse == UserValidationAnswer.NO ||
+        validation.chromeGoogleLogin == UserValidationAnswer.NO
     ReportSection("自检") {
         Text("请按实际使用结果选择；自检不会单独解锁配置能力。")
         ValidationAnswerRow(
@@ -1089,10 +1107,10 @@ private fun UserValidationSection(
             onAnswer = { onChange(validation.copy(chromeGoogleLogin = it)) },
         )
         Text(
-            text = if (allPassed) {
-                "三项功能自检均通过。"
-            } else {
-                "如有失败，请查看上方 Google 环境说明和恢复建议。"
+            text = when {
+                allPassed -> "三项功能自检均通过。"
+                anyFailed -> "存在未通过项目，请查看上方 Google 环境说明和恢复建议。"
+                else -> "尚有项目未测试；未测试不代表失败，也不会提升验证等级。"
             },
             style = MaterialTheme.typography.bodySmall,
         )
@@ -1124,6 +1142,12 @@ private fun ValidationAnswerRow(
             selected = answer == UserValidationAnswer.NO,
             onClick = { onAnswer(UserValidationAnswer.NO) },
             label = { Text("否") },
+        )
+        Spacer(Modifier.width(8.dp))
+        FilterChip(
+            selected = answer == UserValidationAnswer.NOT_TESTED,
+            onClick = { onAnswer(UserValidationAnswer.NOT_TESTED) },
+            label = { Text("未测试") },
         )
     }
 }

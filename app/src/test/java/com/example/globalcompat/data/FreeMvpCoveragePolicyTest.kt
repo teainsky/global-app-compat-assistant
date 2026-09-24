@@ -158,6 +158,14 @@ class FreeMvpCoveragePolicyTest {
         deviceFamily = model,
         marketVariant = MarketVariant.UNKNOWN,
         platformFamily = platformFamily,
+        runtimeEnvironment = when (platformFamily) {
+            PlatformFamily.HARMONY_ANDROID_COMPAT ->
+                RuntimeEnvironment.HARMONY_ANDROID_COMPAT
+            PlatformFamily.STANDARD_ANDROID,
+            PlatformFamily.ANDROID_DERIVED,
+            -> RuntimeEnvironment.NATIVE_ANDROID
+            else -> RuntimeEnvironment.UNKNOWN
+        },
         osFamily = if (platformFamily in HARMONY_PLATFORMS) {
             OsFamily.HARMONY_OS
         } else {

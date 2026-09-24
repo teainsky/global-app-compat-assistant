@@ -16,6 +16,13 @@ enum class PlatformFamily {
     UNKNOWN,
 }
 
+enum class RuntimeEnvironment {
+    NATIVE_ANDROID,
+    HARMONY_ANDROID_COMPAT,
+    THIRD_PARTY_COMPAT_RUNTIME,
+    UNKNOWN,
+}
+
 enum class OsFamily {
     ANDROID,
     HARMONY_OS,
@@ -81,6 +88,7 @@ data class DeviceProfile(
     val deviceFamily: String,
     val marketVariant: MarketVariant,
     val platformFamily: PlatformFamily,
+    val runtimeEnvironment: RuntimeEnvironment = RuntimeEnvironment.UNKNOWN,
     val osFamily: OsFamily,
     val osVersion: String,
     val androidApiLevel: Int,

@@ -20,6 +20,7 @@ import com.example.globalcompat.data.DeviceCategory
 import com.example.globalcompat.data.EnvironmentReport
 import com.example.globalcompat.data.PlatformFamily
 import com.example.globalcompat.data.RomFamily
+import com.example.globalcompat.data.RuntimeEnvironment
 
 class SimulatedInstallationPlanner(
     private val catalogSnapshot: CatalogSnapshot? =
@@ -41,6 +42,23 @@ class SimulatedInstallationPlanner(
             ),
         )
         val plan = environment.compatibilityPlan
+
+        if (environment.deviceProfile.runtimeEnvironment ==
+            RuntimeEnvironment.THIRD_PARTY_COMPAT_RUNTIME
+        ) {
+            stages += stage(
+                SimulationFlowStage.PLAN_MATCHING,
+                SimulationStageStatus.BLOCKED,
+                "当前应用运行在第三方兼容环境中，仅允许检测和基础诊断。",
+            )
+            return result(
+                environment = environment,
+                status = SimulationPlanStatus.BLOCKED,
+                nextAction = SimulationNextAction.STOP_UNSUPPORTED_SYSTEM,
+                stages = stages,
+                nextActionMessage = "已停止：兼容运行环境不能进入旧鸿蒙流程。",
+            )
+        }
 
         if (plan.deviceCategory == DeviceCategory.HARMONYOS_5_PLUS ||
             plan.deviceCategory == DeviceCategory.HARMONY_VERSION_UNKNOWN ||
@@ -444,6 +462,7 @@ class SimulatedInstallationPlanner(
         compatibilityPlanId = environment.compatibilityPlan.planId,
         deviceModel = environment.device.model,
         platformFamily = environment.deviceProfile.platformFamily,
+        runtimeEnvironment = environment.deviceProfile.runtimeEnvironment,
         systemVersion = environment.rom.version.orEmpty(),
         androidApiLevel = environment.android.apiLevel,
         validationLevel = environment.deviceProfile.validationLevel,

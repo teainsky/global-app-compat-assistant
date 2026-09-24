@@ -3,6 +3,7 @@ package com.example.globalcompat.installation
 import com.example.globalcompat.data.DeviceCategory
 import com.example.globalcompat.data.PlatformFamily
 import com.example.globalcompat.data.RomFamily
+import com.example.globalcompat.data.RuntimeEnvironment
 import com.example.globalcompat.preparation.EnvironmentPreparationResult
 
 enum class InstallationExecutionState {
@@ -25,6 +26,7 @@ enum class InstallationExecutionFailure {
     PREPARATION_NOT_INSTALLABLE,
     HARMONYOS_5_PLUS_NOT_SUPPORTED,
     HARMONY_VERSION_UNKNOWN,
+    THIRD_PARTY_COMPAT_RUNTIME_NOT_ALLOWED,
     SESSION_PLAN_INVALID,
     CATALOG_SNAPSHOT_MISMATCH,
     AUTHORIZATION_REJECTED,
@@ -42,6 +44,7 @@ data class InstallationDeviceContext(
     val manufacturer: String,
     val model: String,
     val platformFamily: PlatformFamily,
+    val runtimeEnvironment: RuntimeEnvironment,
     val osVersion: String,
     val androidApiLevel: Int,
     val romFamily: RomFamily,

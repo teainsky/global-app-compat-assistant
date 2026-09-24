@@ -13,6 +13,7 @@ import com.example.globalcompat.data.DeviceCategory
 import com.example.globalcompat.data.GlobalValidationLevel
 import com.example.globalcompat.data.PlatformFamily
 import com.example.globalcompat.data.RomFamily
+import com.example.globalcompat.data.RuntimeEnvironment
 import java.security.MessageDigest
 import java.util.UUID
 import javax.crypto.Mac
@@ -88,6 +89,8 @@ internal class InstallAuthorizationIssuer(
             request.deviceContext.deviceCategory ==
                 DeviceCategory.HUAWEI_HARMONY_ANDROID_COMPAT &&
                 request.deviceContext.platformFamily == PlatformFamily.HARMONY_ANDROID_COMPAT &&
+                request.deviceContext.runtimeEnvironment ==
+                RuntimeEnvironment.HARMONY_ANDROID_COMPAT &&
                 request.deviceContext.romFamily == RomFamily.HARMONY_OS &&
                 request.deviceContext.osVersion.harmonyMajor() in 1..4,
         ) { "InstallAuthorization is restricted to confirmed HarmonyOS 1-4 profiles" }
@@ -144,6 +147,7 @@ internal enum class AuthorizationRejectionReason {
     DEVICE_PROFILE_CHANGED,
     HARMONYOS_5_PLUS_NOT_SUPPORTED,
     HARMONY_VERSION_UNKNOWN,
+    THIRD_PARTY_COMPAT_RUNTIME_NOT_ALLOWED,
     TRUSTED_CATALOG_UNAVAILABLE,
     CATALOG_ROLLBACK,
     CATALOG_DIGEST_CHANGED,
@@ -185,6 +189,11 @@ internal class AuthorizationRevalidationPolicy(
             currentDevice.platformFamily == PlatformFamily.HARMONY_VERSION_UNKNOWN
         ) {
             return rejected(AuthorizationRejectionReason.HARMONY_VERSION_UNKNOWN)
+        }
+        if (currentDevice.runtimeEnvironment == RuntimeEnvironment.THIRD_PARTY_COMPAT_RUNTIME) {
+            return rejected(
+                AuthorizationRejectionReason.THIRD_PARTY_COMPAT_RUNTIME_NOT_ALLOWED,
+            )
         }
         if (currentDevice.deviceCategory == DeviceCategory.HARMONYOS_5_PLUS ||
             currentDevice.platformFamily == PlatformFamily.HARMONY_NATIVE
@@ -319,6 +328,7 @@ internal object InstallAuthorizationDigests {
             "manufacturer" to device.manufacturer.trim().lowercase(),
             "model" to device.model,
             "platformFamily" to device.platformFamily.name,
+            "runtimeEnvironment" to device.runtimeEnvironment.name,
             "osVersion" to device.osVersion,
             "androidApiLevel" to device.androidApiLevel.toString(),
             "romFamily" to device.romFamily.name,

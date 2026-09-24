@@ -33,6 +33,24 @@ class GlobalCompatibilityDecisionEngine(
         val verifiedWorkflow = verifiedWorkflow(profile)
         val freeMvpCoverage = coveragePolicy.evaluate(profile, verifiedWorkflow)
 
+        if (profile.runtimeEnvironment == RuntimeEnvironment.THIRD_PARTY_COMPAT_RUNTIME) {
+            return decision(
+                profile = profile,
+                status = CompatibilityDecisionStatus.DIAGNOSTIC_ONLY,
+                workflow = ApplicableWorkflow.NONE,
+                confidence = DetectionConfidence.HIGH,
+                evidence = baseEvidence,
+                freeMvpCoverage = freeMvpCoverage,
+                warnings = listOf(
+                    message(
+                        "THIRD_PARTY_COMPAT_RUNTIME_DIAGNOSTIC_ONLY",
+                        "当前应用运行在兼容环境中，检测结果代表该兼容环境，不代表手机原生系统。",
+                    ),
+                ),
+                nextAction = CompatibilityNextAction.RUN_DIAGNOSTICS,
+            )
+        }
+
         if (profile.platformFamily == PlatformFamily.HARMONY_NATIVE ||
             profile.platformFamily == PlatformFamily.HARMONY_VERSION_UNKNOWN
         ) {
@@ -201,7 +219,8 @@ class GlobalCompatibilityDecisionEngine(
 
     private fun verifiedWorkflow(profile: DeviceProfile): ApplicableWorkflow? {
         val catalog = catalogSnapshot?.catalog ?: return null
-        if (profile.platformFamily != PlatformFamily.HARMONY_ANDROID_COMPAT ||
+        if (profile.runtimeEnvironment != RuntimeEnvironment.HARMONY_ANDROID_COMPAT ||
+            profile.platformFamily != PlatformFamily.HARMONY_ANDROID_COMPAT ||
             profile.romFamily != RomFamily.HARMONY_OS
         ) {
             return null

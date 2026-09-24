@@ -40,15 +40,15 @@ data class OfficialComponentComparison(
 )
 
 enum class UserValidationAnswer {
-    UNANSWERED,
     YES,
     NO,
+    NOT_TESTED,
 }
 
 data class UserFunctionalValidation(
-    val googleAccountLogin: UserValidationAnswer = UserValidationAnswer.UNANSWERED,
-    val chatGptLoginAndUse: UserValidationAnswer = UserValidationAnswer.UNANSWERED,
-    val chromeGoogleLogin: UserValidationAnswer = UserValidationAnswer.UNANSWERED,
+    val googleAccountLogin: UserValidationAnswer = UserValidationAnswer.NOT_TESTED,
+    val chatGptLoginAndUse: UserValidationAnswer = UserValidationAnswer.NOT_TESTED,
+    val chromeGoogleLogin: UserValidationAnswer = UserValidationAnswer.NOT_TESTED,
 ) {
     fun allSuccessful(): Boolean =
         googleAccountLogin == UserValidationAnswer.YES &&
@@ -61,6 +61,7 @@ data class BaselineDeviceInfo(
 )
 
 data class BaselineSystemInfo(
+    val runtimeEnvironment: String,
     val harmonyOsVersion: String?,
     val androidVersion: String,
     val androidApiLevel: Int,

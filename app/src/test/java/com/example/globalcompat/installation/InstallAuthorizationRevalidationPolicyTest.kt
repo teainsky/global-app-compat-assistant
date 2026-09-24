@@ -6,6 +6,7 @@ import com.example.globalcompat.catalog.CatalogSnapshot
 import com.example.globalcompat.catalog.asTestSnapshot
 import com.example.globalcompat.data.DeviceCategory
 import com.example.globalcompat.data.PlatformFamily
+import com.example.globalcompat.data.RuntimeEnvironment
 import com.example.globalcompat.data.RomFamily
 import com.google.gson.Gson
 import org.junit.Assert.assertEquals
@@ -21,6 +22,7 @@ class InstallAuthorizationRevalidationPolicyTest {
         manufacturer = "Huawei",
         model = "HBN-AL80",
         platformFamily = PlatformFamily.HARMONY_ANDROID_COMPAT,
+        runtimeEnvironment = RuntimeEnvironment.HARMONY_ANDROID_COMPAT,
         osVersion = "4.2.0",
         androidApiLevel = 31,
         romFamily = RomFamily.HARMONY_OS,
