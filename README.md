@@ -2,6 +2,8 @@
 
 一个免费、原生 Android 的设备环境检测与 Google 运行环境诊断工具。项目使用 Kotlin + Jetpack Compose，不依赖 GMS 才能启动。
 
+当前阶段：`0.1.0-rc1`。尚未创建正式 GitHub Release；仓库构建产物在使用项目负责人持有的发布密钥签名并完成真机冒烟前，不作为公开安装包分发。
+
 ## 它解决什么问题
 
 - 识别设备、Android/HarmonyOS 分支、ROM 与核心 Google 组件状态。
@@ -11,7 +13,7 @@
 
 ## 免费版支持范围
 
-免费 MVP 面向全球 Android/Harmony 设备提供广覆盖检测与诊断：
+免费 MVP 为已识别的主流设备环境提供检测与诊断，并为未知 Android 品牌保留安全的基础 fallback；实际覆盖范围以本表及应用内证据为准。
 
 | 设备/环境 | 检测 | Google 诊断 | 已验证配置 |
 | --- | --- | --- | --- |
@@ -43,6 +45,17 @@
 4. 只有精确匹配已签名 `DEVICE_VERIFIED` 记录的设备，才会显示配置入口。
 5. 遇到失败时按应用内“常见错误 / 恢复说明”重试或提交 Issue。
 
+## RC1 截图位置
+
+以下位置将在两台目标真机完成 RC1 冒烟后替换为真实运行截图，不使用设计稿或模拟图：
+
+1. 首屏：开始检测与免费版说明（`docs/screenshots/01-start.png`）
+2. HBN-AL80：能力标签与当前无需处理（`docs/screenshots/02-hbn-result.png`）
+3. 自检：三项确认与恢复说明（`docs/screenshots/03-self-check.png`）
+4. HarmonyOS 6.1 + 卓易通：仅诊断、无配置入口（`docs/screenshots/04-harmony61-diagnostic.png`）
+
+截图内容与隐私处理要求见 [RC1 截图计划](docs/screenshots/README.md)。
+
 ## 安全边界
 
 - 不 Root，不解锁 Bootloader，不修改 ROM。
@@ -60,6 +73,7 @@
 - OEM 文件权限可能限制本机 APK 原文件审计。
 - TikTok 不在首版支持范围。
 - 首版不包含账号、支付、广告、会员或后台服务。
+- 项目不对未列明应用作可用性承诺；结论只覆盖界面明确显示的检测、诊断和精确验证范围。
 
 ## 常见问题
 
@@ -82,6 +96,13 @@
 ## 反馈问题
 
 请使用 [兼容性反馈模板](.github/ISSUE_TEMPLATE/compatibility-report.yml)。不要提交账号信息、设备唯一标识或未脱敏的私人数据。
+
+## 隐私与许可证
+
+- [正式隐私说明](PRIVACY.md)
+- [Apache License 2.0](LICENSE)
+- [第三方许可证边界](THIRD_PARTY_NOTICES.md)
+- [RC1 真机冒烟测试清单](docs/RC1-SMOKE-TEST.md)
 
 ## 开发验证
 
