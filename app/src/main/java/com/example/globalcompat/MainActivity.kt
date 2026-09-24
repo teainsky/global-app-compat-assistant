@@ -1,9 +1,6 @@
 package com.example.globalcompat
 
 import android.os.Bundle
-import android.widget.Toast
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -18,7 +15,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -43,15 +39,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.example.globalcompat.baseline.DeviceBaselineJsonExporter
-import com.example.globalcompat.baseline.DeviceBaselineReportFactory
 import com.example.globalcompat.baseline.DeviceBaselineScanResult
 import com.example.globalcompat.baseline.DeviceBaselineScanner
 import com.example.globalcompat.baseline.OfficialComponentComparison
 import com.example.globalcompat.baseline.OfficialComponentMatchStatus
 import com.example.globalcompat.baseline.UserFunctionalValidation
 import com.example.globalcompat.baseline.UserValidationAnswer
-import com.example.globalcompat.artifact.AndroidOnDeviceArtifactAuditService
 import com.example.globalcompat.artifact.OnDeviceArtifactAuditAvailability
 import com.example.globalcompat.artifact.OnDeviceArtifactAuditReport
 import com.example.globalcompat.artifact.OnDeviceArtifactReadStatus
@@ -83,8 +76,6 @@ import com.example.globalcompat.simulation.SimulatedInstallationPlan
 import com.example.globalcompat.simulation.SimulationFlowStage
 import com.example.globalcompat.simulation.SimulationNextAction
 import com.example.globalcompat.ui.theme.GlobalCompatTheme
-import com.example.globalcompat.validation.ValidationDeviceProfile
-import com.example.globalcompat.validation.ValidationSystemProfile
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -106,61 +97,34 @@ class MainActivity : ComponentActivity() {
 private fun ScannerScreen(scanner: DeviceBaselineScanner) {
     var scanResult by remember { mutableStateOf<DeviceBaselineScanResult?>(null) }
     var functionalValidation by remember { mutableStateOf(UserFunctionalValidation()) }
-    var pendingJson by remember { mutableStateOf<String?>(null) }
+    var showFreeMvpInfo by remember { mutableStateOf(false) }
     var isScanning by remember { mutableStateOf(false) }
     var preparationProgress by remember { mutableStateOf<EnvironmentPreparationProgress?>(null) }
     var preparationResult by remember { mutableStateOf<EnvironmentPreparationResult?>(null) }
     var activePreparation by remember { mutableStateOf<PreparationCancellation?>(null) }
-    var artifactAuditReport by remember { mutableStateOf<OnDeviceArtifactAuditReport?>(null) }
-    var isAuditingInstalledArtifacts by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
-    val reportFactory = remember { DeviceBaselineReportFactory() }
     val preparationService = remember(context.applicationContext) {
         AndroidEnvironmentPreparationService(context.applicationContext)
-    }
-    val artifactAuditService = remember(context.applicationContext) {
-        AndroidOnDeviceArtifactAuditService(context.applicationContext)
     }
     DisposableEffect(Unit) {
         onDispose { activePreparation?.cancel() }
     }
-    val saveLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.CreateDocument("application/json"),
-    ) { uri ->
-        val json = pendingJson
-        pendingJson = null
-        if (uri != null && json != null) {
-            scope.launch {
-                val saved = withContext(Dispatchers.IO) {
-                    runCatching {
-                        context.contentResolver.openOutputStream(uri, "w")
-                            ?.bufferedWriter(Charsets.UTF_8)
-                            ?.use { writer -> writer.write(json) }
-                            ?: error("无法打开目标文件")
-                    }.isSuccess
-                }
-                Toast.makeText(
-                    context,
-                    if (saved) "兼容验证报告已保存" else "报告保存失败",
-                    Toast.LENGTH_SHORT,
-                ).show()
-            }
-        }
-    }
-
     Scaffold { innerPadding ->
         when {
+            showFreeMvpInfo -> FreeMvpInfoScreen(
+                modifier = Modifier.padding(innerPadding),
+                onBack = { showFreeMvpInfo = false },
+            )
             isScanning -> LoadingState(Modifier.padding(innerPadding))
             scanResult == null -> StartState(
                 modifier = Modifier.padding(innerPadding),
+                onAbout = { showFreeMvpInfo = true },
                 onStart = {
                     activePreparation?.cancel()
                     activePreparation = null
                     preparationProgress = null
                     preparationResult = null
-                    artifactAuditReport = null
-                    isAuditingInstalledArtifacts = false
                     isScanning = true
                     scope.launch {
                         scanResult = withContext(Dispatchers.IO) { scanner.scan() }
@@ -173,6 +137,7 @@ private fun ScannerScreen(scanner: DeviceBaselineScanner) {
                 scanResult = checkNotNull(scanResult),
                 functionalValidation = functionalValidation,
                 onFunctionalValidationChange = { functionalValidation = it },
+                onAbout = { showFreeMvpInfo = true },
                 preparationProgress = preparationProgress,
                 preparationResult = preparationResult,
                 onPrepareEnvironment = {
@@ -219,45 +184,6 @@ private fun ScannerScreen(scanner: DeviceBaselineScanner) {
                     }
                 },
                 onCancelPreparation = { activePreparation?.cancel() },
-                artifactAuditReport = artifactAuditReport,
-                isAuditingInstalledArtifacts = isAuditingInstalledArtifacts,
-                onAuditInstalledArtifacts = {
-                    val result = checkNotNull(scanResult)
-                    isAuditingInstalledArtifacts = true
-                    scope.launch {
-                        val report = withContext(Dispatchers.IO) {
-                            artifactAuditService.audit(
-                                deviceProfile = ValidationDeviceProfile(
-                                    manufacturer = result.environment.device.manufacturer,
-                                    model = result.environment.device.model,
-                                ),
-                                systemProfile = ValidationSystemProfile(
-                                    harmonyOsVersion = result.environment.rom.version,
-                                    androidVersion = result.environment.android.release,
-                                    androidApiLevel = result.environment.android.apiLevel,
-                                    romFamily = result.environment.rom.family.name,
-                                    romVersion = result.environment.rom.version,
-                                ),
-                                catalogSnapshot = result.catalogSnapshot,
-                            )
-                        }
-                        artifactAuditReport = report
-                        scanResult = scanner.applyArtifactAudit(result, report)
-                        isAuditingInstalledArtifacts = false
-                    }
-                },
-                onExport = {
-                    val result = checkNotNull(scanResult)
-                    val baseline = reportFactory.create(
-                        environment = result.environment,
-                        comparisons = result.componentComparisons,
-                        functionalValidation = functionalValidation,
-                        capturedAtEpochMillis = result.environment.scannedAtEpochMillis,
-                        artifactAuditReport = artifactAuditReport,
-                    )
-                    pendingJson = DeviceBaselineJsonExporter.toJson(baseline)
-                    saveLauncher.launch("device-baseline.json")
-                },
                 modifier = Modifier.padding(innerPadding),
             )
         }
@@ -268,6 +194,7 @@ private fun ScannerScreen(scanner: DeviceBaselineScanner) {
 private fun StartState(
     modifier: Modifier = Modifier,
     onStart: () -> Unit,
+    onAbout: () -> Unit,
 ) {
     Column(
         modifier = modifier
@@ -293,6 +220,9 @@ private fun StartState(
         ) {
             Text("开始检测")
         }
+        TextButton(onClick = onAbout) {
+            Text("免费版说明")
+        }
     }
 }
 
@@ -314,25 +244,16 @@ private fun EnvironmentReportView(
     scanResult: DeviceBaselineScanResult,
     functionalValidation: UserFunctionalValidation,
     onFunctionalValidationChange: (UserFunctionalValidation) -> Unit,
+    onAbout: () -> Unit,
     preparationProgress: EnvironmentPreparationProgress?,
     preparationResult: EnvironmentPreparationResult?,
     onPrepareEnvironment: () -> Unit,
     onCancelPreparation: () -> Unit,
-    artifactAuditReport: OnDeviceArtifactAuditReport?,
-    isAuditingInstalledArtifacts: Boolean,
-    onAuditInstalledArtifacts: () -> Unit,
-    onExport: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val report = scanResult.environment
-    val validationRecordAvailable = remember(scanResult, functionalValidation) {
-        DeviceBaselineReportFactory().create(
-            environment = report,
-            comparisons = scanResult.componentComparisons,
-            functionalValidation = functionalValidation,
-            capturedAtEpochMillis = report.scannedAtEpochMillis,
-        ).deviceValidationRecord != null
-    }
+    val verifiedConfigurationAvailable = FreeMvpCapability.VERIFIED_CONFIGURATION in
+        report.compatibilityDecision.freeMvpCoverage.capabilities
     LazyColumn(
         modifier = modifier.fillMaxSize(),
         contentPadding = PaddingValues(20.dp),
@@ -346,95 +267,188 @@ private fun EnvironmentReportView(
             )
         }
         item {
-            ReportSection("设备") {
-                ReportRow("品牌", report.device.brand)
-                ReportRow("制造商", report.device.manufacturer)
-                ReportRow("型号", report.device.model)
-                ReportRow("设备代号", report.device.device)
-            }
-        }
-        item {
-            ReportSection("Android") {
-                ReportRow("API", report.android.apiLevel.toString())
-                ReportRow("系统版本", report.android.release)
-                ReportRow("安全补丁", report.android.securityPatch ?: "未知")
-                ReportRow("构建版本", report.android.buildDisplay)
-            }
-        }
-        item {
-            ReportSection("ROM") {
-                ReportRow("识别结果", report.rom.displayName)
-                ReportRow("版本", report.rom.version ?: "未识别")
-                ReportRow("置信度", report.rom.confidence.name)
+            ReportSection("检测结果") {
+                ReportRow("设备", listOf(report.device.brand, report.device.model)
+                    .filter { it.isNotBlank() }
+                    .joinToString(" "))
+                ReportRow("系统", report.rom.displayName)
+                ReportRow("Google 环境", report.compatibilityDecision.userSummary())
             }
         }
         item {
             FreeMvpCoverageCard(report.deviceProfile, report.compatibilityDecision)
         }
         item {
-            Text(
-                text = "基础组件",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold,
-            )
-        }
-        items(report.components, key = { it.id }) { component ->
-            ComponentCard(component)
-        }
-        item {
-            ReportSection("Google 兼容层") {
-                ReportRow("状态", "暂未评估")
-                Text(
-                    text = report.googleCompatibilityLayer.note,
-                    style = MaterialTheme.typography.bodySmall,
-                )
-            }
-        }
-        item {
             CompatibilityDecisionCard(report.compatibilityDecision)
         }
-        item {
-            CompatibilityPlanCard(report.compatibilityPlan)
-        }
-        item {
-            SimulatedInstallationPlanCard(scanResult.simulatedInstallationPlan)
-        }
-        item {
-            EnvironmentPreparationCard(
-                plan = report.compatibilityPlan,
-                progress = preparationProgress,
-                result = preparationResult,
-                onPrepare = onPrepareEnvironment,
-                onCancel = onCancelPreparation,
-            )
-        }
-        item {
-            InstallationExecutionGateCard(scanResult.installationSessionPlan)
-        }
-        item {
-            Text(
-                text = "官方组件指纹比对",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold,
-            )
-        }
-        items(scanResult.componentComparisons, key = { it.fingerprint.packageName }) { comparison ->
-            ComponentFingerprintCard(comparison)
-        }
-        item {
-            OnDeviceArtifactAuditCard(
-                report = artifactAuditReport,
-                isAuditing = isAuditingInstalledArtifacts,
-                onAudit = onAuditInstalledArtifacts,
-            )
+        if (verifiedConfigurationAvailable) {
+            item {
+                if (report.compatibilityDecision.decisionStatus ==
+                    CompatibilityDecisionStatus.NO_ACTION_REQUIRED
+                ) {
+                    ReportSection("已验证设备配置") {
+                        Text("当前组件状态正确，无需重新配置。")
+                        Text(
+                            "仅在检测到缺失且安全门禁通过时，才会提供环境准备入口。",
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
+                } else {
+                    EnvironmentPreparationCard(
+                        plan = report.compatibilityPlan,
+                        progress = preparationProgress,
+                        result = preparationResult,
+                        onPrepare = onPrepareEnvironment,
+                        onCancel = onCancelPreparation,
+                    )
+                }
+            }
         }
         item {
             UserValidationSection(
                 validation = functionalValidation,
                 onChange = onFunctionalValidationChange,
-                validationRecordAvailable = validationRecordAvailable,
-                onExport = onExport,
             )
+        }
+        item { RecoveryGuidanceCard() }
+        item { TechnicalDetailsCard(scanResult) }
+        item {
+            OutlinedButton(
+                modifier = Modifier.fillMaxWidth(),
+                onClick = onAbout,
+            ) {
+                Text("查看免费版说明")
+            }
+        }
+    }
+}
+
+private fun CompatibilityDecision.userSummary(): String = when (decisionStatus) {
+    CompatibilityDecisionStatus.NO_ACTION_REQUIRED -> "已验证，当前无需处理"
+    CompatibilityDecisionStatus.VERIFIED_WORKFLOW_AVAILABLE -> "已验证，可准备配置"
+    CompatibilityDecisionStatus.DIAGNOSTIC_ONLY -> "发现问题，当前仅提供诊断"
+    CompatibilityDecisionStatus.CURRENT_WORKFLOW_NOT_APPLICABLE -> "现有配置流程不适用"
+    CompatibilityDecisionStatus.UNKNOWN -> "证据不足，暂无法安全判断"
+    CompatibilityDecisionStatus.BLOCKED_BY_KNOWN_RULE -> "已由安全规则停止"
+}
+
+@Composable
+private fun FreeMvpInfoScreen(
+    modifier: Modifier = Modifier,
+    onBack: () -> Unit,
+) {
+    LazyColumn(
+        modifier = modifier.fillMaxSize(),
+        contentPadding = PaddingValues(20.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        item {
+            Text(
+                text = "免费版说明",
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold,
+            )
+        }
+        item {
+            ReportSection("这是一个免费工具") {
+                Text("用于检测设备环境、诊断 Google 运行环境，并在实机验证范围内提供配置入口。")
+                Text("不 Root、不解锁 Bootloader、不修改 ROM。")
+            }
+        }
+        item {
+            ReportSection("当前支持范围") {
+                Text("已验证自动配置设备：")
+                Text(
+                    "Huawei Pura 70 Pro+ / HBN-AL80 / HarmonyOS 4.2",
+                    fontWeight = FontWeight.SemiBold,
+                )
+                Text("其他主流 Android 设备目前以检测和诊断为主，不保证都可配置。")
+                Text("HarmonyOS 5/6 不进入旧鸿蒙配置流程。")
+                Text("TikTok 不在首版支持范围。")
+            }
+        }
+        item {
+            ReportSection("安全边界") {
+                Text("未通过精确设备验证时，不会开放自动配置。")
+                Text("不会静默安装、自动卸载，也不会上传检测报告。")
+                Text("系统版本或证据不足时会安全停止，并保留诊断结果。")
+            }
+        }
+        item {
+            Button(
+                modifier = Modifier.fillMaxWidth(),
+                onClick = onBack,
+            ) {
+                Text("返回")
+            }
+        }
+    }
+}
+
+@Composable
+private fun RecoveryGuidanceCard() {
+    ReportSection("常见错误 / 恢复说明") {
+        Text("检测失败：关闭应用后重新打开，再次开始检测。")
+        Text("组件无法读取：确认组件未被系统停用，然后重新检测。")
+        Text("准备中断：检查网络后重试；未完成或校验失败的文件不会继续使用。")
+        Text("系统版本无法识别：不要强行配置，等待规则更新或提交 Issue。")
+    }
+}
+
+@Composable
+private fun TechnicalDetailsCard(scanResult: DeviceBaselineScanResult) {
+    var expanded by remember(scanResult) { mutableStateOf(false) }
+    val report = scanResult.environment
+    ReportSection("技术详情") {
+        Text("供排查和 Issue 反馈使用，普通使用无需展开。")
+        TextButton(onClick = { expanded = !expanded }) {
+            Text(if (expanded) "收起技术详情" else "展开技术详情")
+        }
+        if (expanded) {
+            ReportRow("制造商", report.device.manufacturer)
+            ReportRow("品牌", report.device.brand)
+            ReportRow("型号", report.device.model)
+            ReportRow("设备代号", report.device.device)
+            ReportRow("Android API", report.android.apiLevel.toString())
+            ReportRow("Android 版本", report.android.release)
+            ReportRow("系统构建", report.android.buildDisplay)
+            ReportRow("ROM", report.rom.displayName)
+            ReportRow("ROM 版本", report.rom.version ?: "未识别")
+            ReportRow("平台分类", report.deviceProfile.platformFamily.name)
+            ReportRow("验证等级", report.deviceProfile.validationLevel.name)
+            ReportRow("决策", report.compatibilityDecision.decisionStatus.name)
+            ReportRow("适用流程", report.compatibilityDecision.applicableWorkflow.name)
+            ReportRow("方案", report.compatibilityPlan.planId.name)
+            scanResult.catalogSnapshot?.let { snapshot ->
+                ReportRow("Catalog 版本", snapshot.catalogVersion.toString())
+                ReportRow("Catalog 来源", snapshot.source.name)
+                ReportRow("Catalog 摘要", snapshot.catalogDigest)
+            }
+            report.components.forEach { component ->
+                ReportRow(
+                    component.displayName,
+                    "${component.presence.name} / ${component.versionName ?: "版本未知"}",
+                )
+            }
+            scanResult.componentComparisons.forEach { comparison ->
+                ReportRow(
+                    comparison.fingerprint.packageName,
+                    "${comparison.status.name} / ${comparison.signatureStatus.name}",
+                )
+            }
+            report.compatibilityDecision.evidence.forEach { evidence ->
+                Text(
+                    "• ${evidence.code}：${evidence.observedValue}",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+            (report.compatibilityDecision.blockers + report.compatibilityDecision.warnings)
+                .forEach { message ->
+                    Text(
+                        "• ${message.code}：${message.message}",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
         }
     }
 }
@@ -739,7 +753,7 @@ private fun CompatibilityDecisionCard(decision: CompatibilityDecision) {
         CompatibilityDecisionStatus.BLOCKED_BY_KNOWN_RULE -> "可信规则已阻止当前流程"
     }
 
-    ReportSection("全球兼容决策") {
+    ReportSection("Google 环境说明") {
         Text(
             text = userMessage,
             style = MaterialTheme.typography.titleMedium,
@@ -1053,10 +1067,12 @@ private fun ComponentFingerprintCard(comparison: OfficialComponentComparison) {
 private fun UserValidationSection(
     validation: UserFunctionalValidation,
     onChange: (UserFunctionalValidation) -> Unit,
-    validationRecordAvailable: Boolean,
-    onExport: () -> Unit,
 ) {
-    ReportSection("真实使用验证") {
+    val allPassed = validation.googleAccountLogin == UserValidationAnswer.YES &&
+        validation.chatGptLoginAndUse == UserValidationAnswer.YES &&
+        validation.chromeGoogleLogin == UserValidationAnswer.YES
+    ReportSection("自检") {
+        Text("请按实际使用结果选择；自检不会单独解锁配置能力。")
         ValidationAnswerRow(
             label = "Google账号可以登录",
             answer = validation.googleAccountLogin,
@@ -1073,21 +1089,11 @@ private fun UserValidationSection(
             onAnswer = { onChange(validation.copy(chromeGoogleLogin = it)) },
         )
         Text(
-            text = if (validationRecordAvailable) {
-                "已满足本机验证记录条件；不会修改全局 catalog。"
+            text = if (allPassed) {
+                "三项功能自检均通过。"
             } else {
-                "只有两件套官方匹配、设备信息完整且三项均确认成功时，才生成本机验证记录。"
+                "如有失败，请查看上方 Google 环境说明和恢复建议。"
             },
-            style = MaterialTheme.typography.bodySmall,
-        )
-        OutlinedButton(
-            modifier = Modifier.fillMaxWidth(),
-            onClick = onExport,
-        ) {
-            Text("导出兼容验证报告")
-        }
-        Text(
-            text = "报告通过系统保存，不会由本应用上传。",
             style = MaterialTheme.typography.bodySmall,
         )
     }

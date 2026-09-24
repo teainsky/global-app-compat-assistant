@@ -1,22 +1,97 @@
 # Global App Compat Assistant
 
-Android 原生应用，Kotlin + Jetpack Compose。
+一个免费、原生 Android 的设备环境检测与 Google 运行环境诊断工具。项目使用 Kotlin + Jetpack Compose，不依赖 GMS 才能启动。
 
-当前已完成设备环境扫描、方案匹配、可信组件 catalog、开发侧官方组件审计，以及用户主动触发的真实设备基线采集。APK 可只读获取已安装 Google 两件套的版本与签名摘要，和已审计官方元数据比较，并通过系统文件选择器导出隐私安全的 `device-baseline.json`。版本与签名匹配不会自动提升全局设备兼容状态。
+## 它解决什么问题
 
-报告页包含“模拟安装计划”，以纯规则方式展示设备检测、方案匹配、官方组件选择、完整性证据、当前组件判断、依赖顺序和下一步动作。用户可主动把签名 catalog 中明确记录的官方 GitHub 组件下载到 App 私有临时目录；只有 SHA-256、包名、版本和 APK 签名全部匹配才进入准备完成状态。
+- 识别设备、Android/HarmonyOS 分支、ROM 与核心 Google 组件状态。
+- 区分“组件存在”“来源可信”“功能可用”和“Play 认证”，避免只看到包名就下结论。
+- 用签名 Catalog 和精确设备证据决定是否存在可信配置流程。
+- 对证据不足、系统分支不适用或校验失败的场景安全停止。
 
-安装执行安全门禁会把模拟步骤转换成结构化安装会话，并逐项核对设备分支、官方来源、SHA-256、签名、包名、版本、artifact 完整性状态与设备兼容验证状态。执行器使用 Android 官方 `PackageInstaller`，始终要求系统用户确认，并在每个组件安装后复检版本、启用状态和系统报告签名；会话状态持久化，结果不明确时失败关闭且不重复提交安装。
+## 免费版支持范围
 
-当前 Huawei catalog 仍为 `CANDIDATE/UNTESTED`，因此真实设备上的安装入口保持禁用，不会触发安装。应用不依赖 GMS 启动，不请求 `QUERY_ALL_PACKAGES`，不静默安装、不自动卸载、不读取账号内容或设备唯一标识、不上传报告，也不包含支付、登录操作、官网、VPN、代理或 AI API 能力。
+免费 MVP 面向全球 Android/Harmony 设备提供广覆盖检测与诊断：
 
-报告页还提供无 ADB 的本机原文件审计：仅对清单中明确可见的两个组件读取 `ApplicationInfo.sourceDir`，尝试计算已安装 base APK 的 SHA-256，并结合包名、版本和系统报告签名与官方审计数据比较。该能力不新增权限；若 OEM 的文件权限或 SELinux 阻止读取，应用会返回 `NOT_ACCESSIBLE`，不会尝试绕过。设备内证据最高只到 `ARTIFACT_VERIFIED`，不能自行发布 `DEVICE_VERIFIED`。
+| 设备/环境 | 检测 | Google 诊断 | 已验证配置 |
+| --- | --- | --- | --- |
+| Huawei Pura 70 Pro+ / HBN-AL80 / HarmonyOS 4.2 | ✅ | ✅ | ✅ |
+| Huawei HarmonyOS 4.x 其他型号 | ✅ | ✅ | ❌ |
+| Honor、Xiaomi/Redmi/POCO、OPPO、vivo/iQOO、OnePlus | ✅ | ✅ | ❌ |
+| Samsung、Pixel | ✅ | ✅ | 仅在健康证据充分时显示无需处理 |
+| Motorola、TECNO/Infinix/itel、Nothing | ✅ | ✅ | ❌ |
+| 未知 Android 品牌 | 基础检测 | 基础诊断 | ❌ |
+| HarmonyOS 5/6 原生分支 | ✅ | ✅ | 不进入旧鸿蒙流程 |
 
-首台目标验收设备：Huawei Pura 70 Pro+ / HarmonyOS 4.2。
+品牌不是兼容结论。相同品牌在不同系统、市场版本和 Google 环境下可以得到不同结果；市场版本没有可信证据时保持 `UNKNOWN`。
 
-## 验证
+## 当前已验证设备
+
+- Huawei Pura 70 Pro+
+- 型号：`HBN-AL80`
+- 系统：HarmonyOS `4.2.0`
+- Android API：`31`
+- 组件版本：microG Huawei `v0.3.16.252432`
+
+验证记录只绑定以上精确设备与系统画像，不自动扩展到 HarmonyOS 4.3、5/6、其他 Pura 或相似 Huawei 型号。
+
+## 使用流程
+
+1. 打开应用，点击“开始检测”。
+2. 查看“可检测 / 可诊断 / 已验证可配置”能力标签。
+3. 阅读 Google 环境说明并完成三项自检。
+4. 只有精确匹配已签名 `DEVICE_VERIFIED` 记录的设备，才会显示配置入口。
+5. 遇到失败时按应用内“常见错误 / 恢复说明”重试或提交 Issue。
+
+## 安全边界
+
+- 不 Root，不解锁 Bootloader，不修改 ROM。
+- 不静默安装，不绕过 Android 系统确认，不自动卸载已有组件。
+- 不读取 Google 账号内容、IMEI、手机号、Android ID、序列号、MAC、联系人或 SIM 标识。
+- 默认完全本地运行，不上传检测结果。
+- 不使用第三方 APK 镜像；组件与规则证据失败时 fail closed。
+- 未达到精确 `DEVICE_VERIFIED` 的设备不能解锁真实配置执行器。
+
+## 已知限制
+
+- 当前只有一条精确实机验证记录，其他主流 Android 设备以检测和诊断为主。
+- “组件完整”不等于可信、功能健康或通过 Play 认证。
+- HarmonyOS 5/6 不适用现有 HarmonyOS 1–4 Android 兼容流程。
+- OEM 文件权限可能限制本机 APK 原文件审计。
+- TikTok 不在首版支持范围。
+- 首版不包含账号、支付、广告、会员或后台服务。
+
+## 常见问题
+
+### 为什么我的手机只能诊断，不能配置？
+
+真实配置只对精确设备、系统、可信组件和签名规则均通过验证的画像开放。品牌相同不代表可继承验证结论。
+
+### 检测到 Google 包，为什么没有显示“无需处理”？
+
+包存在只说明组件集合状态。应用还需要可信来源、功能健康或精确设备验证证据，才会给出“无需处理”。
+
+### 应用会修改手机吗？
+
+检测与诊断是只读的。任何未来配置动作也必须经过安全门禁与 Android 系统用户确认。
+
+### HarmonyOS 5/6 可以使用旧鸿蒙方案吗？
+
+不可以。原生 HarmonyOS 和无法确认版本的 Harmony 分支会与 HarmonyOS 1–4 流程隔离。
+
+## 反馈问题
+
+请使用 [兼容性反馈模板](.github/ISSUE_TEMPLATE/compatibility-report.yml)。不要提交账号信息、设备唯一标识或未脱敏的私人数据。
+
+## 开发验证
 
 ```powershell
-.\gradlew.bat assembleDebug testDebugUnitTest lintDebug
+.\.toolchains\gradle-8.9\bin\gradle.bat assembleDebug
+.\.toolchains\gradle-8.9\bin\gradle.bat testDebugUnitTest
+.\.toolchains\gradle-8.9\bin\gradle.bat lintDebug
 git diff --check
 ```
+
+## 后续工具与项目
+
+这里预留轻量入口，用于未来独立的诊断工具或相关开源项目；首版不在应用内加入商业化导流。
