@@ -38,6 +38,7 @@ data class CompatibilityDecision(
     val decisionStatus: CompatibilityDecisionStatus,
     val validationLevel: GlobalValidationLevel,
     val googleEnvironmentAssessment: GoogleEnvironmentAssessment,
+    val freeMvpCoverage: FreeMvpCoverage,
     val applicableWorkflow: ApplicableWorkflow,
     val confidence: DetectionConfidence,
     val evidence: List<DecisionEvidence>,

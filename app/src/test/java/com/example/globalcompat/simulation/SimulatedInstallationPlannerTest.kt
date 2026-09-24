@@ -25,6 +25,9 @@ import com.example.globalcompat.data.DeviceCategory
 import com.example.globalcompat.data.DeviceIdentity
 import com.example.globalcompat.data.DeviceProfile
 import com.example.globalcompat.data.EnvironmentReport
+import com.example.globalcompat.data.FreeMvpCapability
+import com.example.globalcompat.data.FreeMvpConfigurationStatus
+import com.example.globalcompat.data.FreeMvpCoverage
 import com.example.globalcompat.data.GlobalValidationLevel
 import com.example.globalcompat.data.GoogleCompatibilityLayerStatus
 import com.example.globalcompat.data.GoogleComponentSetState
@@ -405,6 +408,20 @@ class SimulatedInstallationPlannerTest {
                 functionalHealth = FunctionalHealth.UNTESTED,
                 playCertification = PlayCertification.UNKNOWN,
                 evidence = emptyList(),
+            ),
+            freeMvpCoverage = FreeMvpCoverage(
+                capabilities = buildList {
+                    add(FreeMvpCapability.DETECTION)
+                    add(FreeMvpCapability.GOOGLE_DIAGNOSTICS)
+                    if (model == "HBN-AL80" && romVersion == "4.2.0") {
+                        add(FreeMvpCapability.VERIFIED_CONFIGURATION)
+                    }
+                },
+                configurationStatus = if (model == "HBN-AL80" && romVersion == "4.2.0") {
+                    FreeMvpConfigurationStatus.VERIFIED_AVAILABLE
+                } else {
+                    FreeMvpConfigurationStatus.NOT_VERIFIED
+                },
             ),
             applicableWorkflow = if (model == "HBN-AL80" && romVersion == "4.2.0") {
                 ApplicableWorkflow.HUAWEI_MICROG_COMPAT

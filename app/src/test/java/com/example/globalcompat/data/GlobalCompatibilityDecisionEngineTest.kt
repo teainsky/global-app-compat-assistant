@@ -2,6 +2,7 @@ package com.example.globalcompat.data
 
 import com.example.globalcompat.catalog.RuntimeTrustedCatalogRepository
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -24,6 +25,10 @@ class GlobalCompatibilityDecisionEngineTest {
         assertEquals(CompatibilityDecisionStatus.NO_ACTION_REQUIRED, decision.decisionStatus)
         assertEquals(GlobalValidationLevel.DEVICE_VERIFIED, decision.validationLevel)
         assertEquals(ApplicableWorkflow.NONE, decision.applicableWorkflow)
+        assertTrue(
+            FreeMvpCapability.VERIFIED_CONFIGURATION in
+                decision.freeMvpCoverage.capabilities,
+        )
         assertEquals(PlayCertification.UNKNOWN, decision.googleEnvironmentAssessment.playCertification)
         assertTrue(decision.warnings.any { it.code == "PLAY_CERTIFICATION_UNKNOWN" })
         val snapshot = requireNotNull(
@@ -42,6 +47,10 @@ class GlobalCompatibilityDecisionEngineTest {
             decision.decisionStatus,
         )
         assertEquals(ApplicableWorkflow.HUAWEI_MICROG_COMPAT, decision.applicableWorkflow)
+        assertTrue(
+            FreeMvpCapability.VERIFIED_CONFIGURATION in
+                decision.freeMvpCoverage.capabilities,
+        )
         assertEquals(CompatibilityNextAction.PREPARE_VERIFIED_WORKFLOW, decision.nextAction)
         assertTrue(decision.blockers.isEmpty())
     }
@@ -63,20 +72,32 @@ class GlobalCompatibilityDecisionEngineTest {
     }
 
     @Test
-    fun `trusted verified healthy environment can need no action without Play inference`() {
-        val decision = engine.decide(
-            profile("Google", "Pixel-lab", RomFamily.PIXEL_ANDROID).copy(
-                validationLevel = GlobalValidationLevel.ENVIRONMENT_VERIFIED,
-                googleEnvironmentAssessment = assessment(
-                    GoogleComponentSetState.COMPLETE,
-                    ComponentTrust.TRUSTED,
-                    FunctionalHealth.VERIFIED_HEALTHY,
+    fun `trusted verified healthy Pixel and Samsung need no action without Play inference`() {
+        listOf(
+            profile("Google", "Pixel-lab", RomFamily.PIXEL_ANDROID),
+            profile("Samsung", "Samsung-lab", RomFamily.ONE_UI),
+        ).forEach { profile ->
+            val decision = engine.decide(
+                profile.copy(
+                    validationLevel = GlobalValidationLevel.ENVIRONMENT_VERIFIED,
+                    googleEnvironmentAssessment = assessment(
+                        GoogleComponentSetState.COMPLETE,
+                        ComponentTrust.TRUSTED,
+                        FunctionalHealth.VERIFIED_HEALTHY,
+                    ),
                 ),
-            ),
-        )
+            )
 
-        assertEquals(CompatibilityDecisionStatus.NO_ACTION_REQUIRED, decision.decisionStatus)
-        assertEquals(PlayCertification.UNKNOWN, decision.googleEnvironmentAssessment.playCertification)
+            assertEquals(CompatibilityDecisionStatus.NO_ACTION_REQUIRED, decision.decisionStatus)
+            assertEquals(
+                PlayCertification.UNKNOWN,
+                decision.googleEnvironmentAssessment.playCertification,
+            )
+            assertFalse(
+                FreeMvpCapability.VERIFIED_CONFIGURATION in
+                    decision.freeMvpCoverage.capabilities,
+            )
+        }
     }
 
     @Test

@@ -11,6 +11,7 @@ class GlobalCompatibilityDecisionEngine(
     private val catalogSnapshot: CatalogSnapshot? =
         RuntimeTrustedCatalogRepository.instance.currentSnapshot(),
     private val catalogMatcher: TrustedComponentCatalogMatcher = TrustedComponentCatalogMatcher(),
+    private val coveragePolicy: FreeMvpCoveragePolicy = FreeMvpCoveragePolicy(),
 ) {
     fun decide(profile: DeviceProfile): CompatibilityDecision {
         val baseEvidence = profile.evidence.map { evidence ->
@@ -29,6 +30,8 @@ class GlobalCompatibilityDecisionEngine(
                 profile.androidApiLevel.toString(),
             ),
         )
+        val verifiedWorkflow = verifiedWorkflow(profile)
+        val freeMvpCoverage = coveragePolicy.evaluate(profile, verifiedWorkflow)
 
         if (profile.platformFamily == PlatformFamily.HARMONY_NATIVE ||
             profile.platformFamily == PlatformFamily.HARMONY_VERSION_UNKNOWN
@@ -44,6 +47,7 @@ class GlobalCompatibilityDecisionEngine(
                     DetectionConfidence.HIGH
                 },
                 evidence = baseEvidence,
+                freeMvpCoverage = freeMvpCoverage,
                 warnings = listOf(
                     message(
                         if (versionUnknown) {
@@ -69,6 +73,7 @@ class GlobalCompatibilityDecisionEngine(
                 workflow = ApplicableWorkflow.NONE,
                 confidence = DetectionConfidence.HIGH,
                 evidence = baseEvidence,
+                freeMvpCoverage = freeMvpCoverage,
                 blockers = listOf(
                     message(
                         "TRUSTED_BLOCK_RULE",
@@ -93,6 +98,7 @@ class GlobalCompatibilityDecisionEngine(
                 workflow = ApplicableWorkflow.NONE,
                 confidence = DetectionConfidence.LOW,
                 evidence = baseEvidence,
+                freeMvpCoverage = freeMvpCoverage,
                 warnings = listOf(
                     message(
                         "TRUSTED_CATALOG_UNAVAILABLE",
@@ -117,6 +123,7 @@ class GlobalCompatibilityDecisionEngine(
                 workflow = ApplicableWorkflow.NONE,
                 confidence = DetectionConfidence.HIGH,
                 evidence = baseEvidence,
+                freeMvpCoverage = freeMvpCoverage,
                 warnings = buildList {
                     if (profile.googleEnvironmentAssessment.playCertification ==
                         PlayCertification.UNKNOWN
@@ -133,7 +140,6 @@ class GlobalCompatibilityDecisionEngine(
             )
         }
 
-        val verifiedWorkflow = verifiedWorkflow(profile)
         if (profile.validationLevel == GlobalValidationLevel.DEVICE_VERIFIED &&
             verifiedWorkflow != null
         ) {
@@ -147,6 +153,7 @@ class GlobalCompatibilityDecisionEngine(
                     source = "SignedCompatibilityCatalog",
                     observedValue = verifiedWorkflow.name,
                 ),
+                freeMvpCoverage = freeMvpCoverage,
                 nextAction = CompatibilityNextAction.PREPARE_VERIFIED_WORKFLOW,
             )
         }
@@ -158,6 +165,7 @@ class GlobalCompatibilityDecisionEngine(
                 workflow = ApplicableWorkflow.NONE,
                 confidence = diagnosticConfidence(profile.validationLevel),
                 evidence = baseEvidence,
+                freeMvpCoverage = freeMvpCoverage,
                 warnings = listOf(
                     message(
                         "EXACT_DEVICE_VERIFICATION_REQUIRED",
@@ -180,6 +188,7 @@ class GlobalCompatibilityDecisionEngine(
             workflow = ApplicableWorkflow.NONE,
             confidence = DetectionConfidence.UNKNOWN,
             evidence = baseEvidence,
+            freeMvpCoverage = freeMvpCoverage,
             warnings = listOf(
                 message(
                     "INSUFFICIENT_GLOBAL_EVIDENCE",
@@ -223,6 +232,7 @@ class GlobalCompatibilityDecisionEngine(
         workflow: ApplicableWorkflow,
         confidence: DetectionConfidence,
         evidence: List<DecisionEvidence>,
+        freeMvpCoverage: FreeMvpCoverage,
         blockers: List<DecisionMessage> = emptyList(),
         warnings: List<DecisionMessage> = emptyList(),
         nextAction: CompatibilityNextAction,
@@ -230,6 +240,7 @@ class GlobalCompatibilityDecisionEngine(
         decisionStatus = status,
         validationLevel = profile.validationLevel,
         googleEnvironmentAssessment = profile.googleEnvironmentAssessment,
+        freeMvpCoverage = freeMvpCoverage,
         applicableWorkflow = workflow,
         confidence = confidence,
         evidence = evidence,

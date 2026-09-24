@@ -28,6 +28,7 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -60,6 +61,10 @@ import com.example.globalcompat.data.CompatibilityPlan
 import com.example.globalcompat.data.CompatibilityPlanId
 import com.example.globalcompat.data.CompatibilityDecision
 import com.example.globalcompat.data.CompatibilityDecisionStatus
+import com.example.globalcompat.data.DeviceProfile
+import com.example.globalcompat.data.FreeMvpCapability
+import com.example.globalcompat.data.FreeMvpConfigurationStatus
+import com.example.globalcompat.data.PlatformFamily
 import com.example.globalcompat.data.SystemComponent
 import com.example.globalcompat.installation.InstallationBlockReason
 import com.example.globalcompat.installation.InstallationSessionPlan
@@ -364,28 +369,7 @@ private fun EnvironmentReportView(
             }
         }
         item {
-            ReportSection("全球设备画像") {
-                ReportRow("平台", report.deviceProfile.platformFamily.name)
-                ReportRow("市场版本", report.deviceProfile.marketVariant.name)
-                ReportRow(
-                    "Google 组件集合",
-                    report.deviceProfile.googleEnvironmentAssessment.componentSetState.name,
-                )
-                ReportRow(
-                    "组件可信度",
-                    report.deviceProfile.googleEnvironmentAssessment.componentTrust.name,
-                )
-                ReportRow(
-                    "功能健康",
-                    report.deviceProfile.googleEnvironmentAssessment.functionalHealth.name,
-                )
-                ReportRow(
-                    "Play 认证",
-                    report.deviceProfile.googleEnvironmentAssessment.playCertification.name,
-                )
-                ReportRow("安装能力", report.deviceProfile.installationCapability.name)
-                ReportRow("验证等级", report.deviceProfile.validationLevel.name)
-            }
+            FreeMvpCoverageCard(report.deviceProfile, report.compatibilityDecision)
         }
         item {
             Text(
@@ -677,6 +661,67 @@ private fun Long.userFileSize(): String = when {
 }
 
 @Composable
+private fun FreeMvpCoverageCard(
+    profile: DeviceProfile,
+    decision: CompatibilityDecision,
+) {
+    var showTechnicalDetails by remember(decision) { mutableStateOf(false) }
+    val coverage = decision.freeMvpCoverage
+    val summary = when {
+        FreeMvpCapability.VERIFIED_CONFIGURATION in coverage.capabilities ->
+            "此设备已有精确验证，可使用已验证配置流程"
+        profile.platformFamily == PlatformFamily.UNKNOWN -> "可检测，未验证"
+        coverage.configurationStatus == FreeMvpConfigurationStatus.WORKFLOW_NOT_APPLICABLE ->
+            "可检测、可诊断；现有配置工作流不适用"
+        else -> "可检测、可诊断；自动配置尚未通过精确设备验证"
+    }
+
+    ReportSection("免费版能力") {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            coverage.capabilities.forEach { capability ->
+                Surface(
+                    color = MaterialTheme.colorScheme.secondaryContainer,
+                    shape = MaterialTheme.shapes.small,
+                ) {
+                    Text(
+                        text = capability.userLabel(),
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                        style = MaterialTheme.typography.labelLarge,
+                    )
+                }
+            }
+        }
+        Text(summary, style = MaterialTheme.typography.bodyMedium)
+        TextButton(onClick = { showTechnicalDetails = !showTechnicalDetails }) {
+            Text(if (showTechnicalDetails) "收起技术详情" else "查看技术详情")
+        }
+        if (showTechnicalDetails) {
+            ReportRow("平台", profile.platformFamily.name)
+            ReportRow("ROM", profile.romFamily.name)
+            ReportRow("市场版本", profile.marketVariant.name)
+            ReportRow("Google 组件集合", profile.googleEnvironmentAssessment.componentSetState.name)
+            ReportRow("组件可信度", profile.googleEnvironmentAssessment.componentTrust.name)
+            ReportRow("功能健康", profile.googleEnvironmentAssessment.functionalHealth.name)
+            ReportRow("Play 认证", profile.googleEnvironmentAssessment.playCertification.name)
+            ReportRow("安装能力", profile.installationCapability.name)
+            ReportRow("验证等级", profile.validationLevel.name)
+            ReportRow("配置覆盖", coverage.configurationStatus.name)
+            decision.catalogVersion?.let { ReportRow("Catalog 版本", it.toString()) }
+            decision.catalogDigest?.let { ReportRow("Catalog 摘要", it) }
+        }
+    }
+}
+
+private fun FreeMvpCapability.userLabel(): String = when (this) {
+    FreeMvpCapability.DETECTION -> "可检测"
+    FreeMvpCapability.GOOGLE_DIAGNOSTICS -> "可诊断"
+    FreeMvpCapability.VERIFIED_CONFIGURATION -> "已验证可配置"
+}
+
+@Composable
 private fun CompatibilityDecisionCard(decision: CompatibilityDecision) {
     var showTechnicalEvidence by remember(decision) { mutableStateOf(false) }
     val userMessage = when (decision.decisionStatus) {
@@ -700,11 +745,11 @@ private fun CompatibilityDecisionCard(decision: CompatibilityDecision) {
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.SemiBold,
         )
-        ReportRow("下一步", decision.nextAction.name)
         TextButton(onClick = { showTechnicalEvidence = !showTechnicalEvidence }) {
             Text(if (showTechnicalEvidence) "收起技术证据" else "查看技术证据")
         }
         if (showTechnicalEvidence) {
+            ReportRow("下一步", decision.nextAction.name)
             ReportRow("决策", decision.decisionStatus.name)
             ReportRow("验证等级", decision.validationLevel.name)
             ReportRow(

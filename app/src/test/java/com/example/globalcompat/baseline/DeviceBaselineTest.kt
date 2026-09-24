@@ -21,6 +21,9 @@ import com.example.globalcompat.data.DeviceCategory
 import com.example.globalcompat.data.DeviceIdentity
 import com.example.globalcompat.data.DeviceProfile
 import com.example.globalcompat.data.EnvironmentReport
+import com.example.globalcompat.data.FreeMvpCapability
+import com.example.globalcompat.data.FreeMvpConfigurationStatus
+import com.example.globalcompat.data.FreeMvpCoverage
 import com.example.globalcompat.data.GlobalValidationLevel
 import com.example.globalcompat.data.GoogleCompatibilityLayerStatus
 import com.example.globalcompat.data.GoogleComponentSetState
@@ -478,6 +481,13 @@ class DeviceBaselineTest {
                 functionalHealth = FunctionalHealth.UNKNOWN,
                 playCertification = PlayCertification.UNKNOWN,
                 evidence = emptyList(),
+            ),
+            freeMvpCoverage = FreeMvpCoverage(
+                capabilities = listOf(
+                    FreeMvpCapability.DETECTION,
+                    FreeMvpCapability.GOOGLE_DIAGNOSTICS,
+                ),
+                configurationStatus = FreeMvpConfigurationStatus.NOT_VERIFIED,
             ),
             applicableWorkflow = ApplicableWorkflow.NONE,
             confidence = DetectionConfidence.UNKNOWN,
