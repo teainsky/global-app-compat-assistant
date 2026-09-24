@@ -1,9 +1,14 @@
 package com.example.globalcompat
 
+import android.Manifest
+import android.content.Intent
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -29,6 +34,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -77,25 +83,48 @@ import com.example.globalcompat.simulation.SimulatedInstallationPlan
 import com.example.globalcompat.simulation.SimulationFlowStage
 import com.example.globalcompat.simulation.SimulationNextAction
 import com.example.globalcompat.ui.theme.GlobalCompatTheme
+import com.example.globalcompat.update.AndroidReleaseUpdater
+import com.example.globalcompat.update.AvailableRelease
+import com.example.globalcompat.update.ReleaseUpdateNotification
+import com.example.globalcompat.update.ReleaseUpdateStatus
+import com.example.globalcompat.update.ReleaseUpdateUiState
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.io.File
 
 class MainActivity : ComponentActivity() {
+    private var openUpdateDetails by mutableStateOf(false)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        openUpdateDetails = intent.getBooleanExtra(ReleaseUpdateNotification.EXTRA_OPEN_UPDATE, false)
         enableEdgeToEdge()
         setContent {
             GlobalCompatTheme {
                 ScannerScreen(
                     scanner = remember { DeviceBaselineScanner(applicationContext) },
+                    openUpdateDetails = openUpdateDetails,
+                    onUpdateDetailsOpened = { openUpdateDetails = false },
                 )
             }
         }
     }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        if (intent.getBooleanExtra(ReleaseUpdateNotification.EXTRA_OPEN_UPDATE, false)) {
+            openUpdateDetails = true
+        }
+    }
 }
 @Composable
-private fun ScannerScreen(scanner: DeviceBaselineScanner) {
+private fun ScannerScreen(
+    scanner: DeviceBaselineScanner,
+    openUpdateDetails: Boolean,
+    onUpdateDetailsOpened: () -> Unit,
+) {
     var scanResult by remember { mutableStateOf<DeviceBaselineScanResult?>(null) }
     var functionalValidation by remember { mutableStateOf(UserFunctionalValidation()) }
     var showFreeMvpInfo by remember { mutableStateOf(false) }
@@ -105,20 +134,127 @@ private fun ScannerScreen(scanner: DeviceBaselineScanner) {
     var activePreparation by remember { mutableStateOf<PreparationCancellation?>(null) }
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
+    val releaseUpdater = remember(context.applicationContext) {
+        AndroidReleaseUpdater(context.applicationContext)
+    }
+    var updateState by remember {
+        mutableStateOf(releaseUpdater.initialState(BuildConfig.VERSION_NAME))
+    }
+    var verifiedUpdateApk by remember { mutableStateOf<File?>(null) }
+    var pendingNotificationRelease by remember { mutableStateOf<AvailableRelease?>(null) }
+    val notificationPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) { granted ->
+        if (granted) {
+            pendingNotificationRelease?.let { ReleaseUpdateNotification.show(context, it) }
+        }
+        pendingNotificationRelease = null
+    }
     val preparationService = remember(context.applicationContext) {
         AndroidEnvironmentPreparationService(context.applicationContext)
     }
     DisposableEffect(Unit) {
         onDispose { activePreparation?.cancel() }
     }
+    LaunchedEffect(Unit) {
+        updateState = updateState.copy(status = ReleaseUpdateStatus.CHECKING)
+        val checked = withContext(Dispatchers.IO) {
+            releaseUpdater.checkIfDue(BuildConfig.VERSION_NAME)
+        }
+        updateState = checked
+        checked.release?.takeIf { checked.status == ReleaseUpdateStatus.UPDATE_AVAILABLE }
+            ?.let { release ->
+                if (ReleaseUpdateNotification.hasPermission(context)) {
+                    ReleaseUpdateNotification.show(context, release)
+                } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    pendingNotificationRelease = release
+                    notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                }
+            }
+    }
+    LaunchedEffect(openUpdateDetails) {
+        if (openUpdateDetails) {
+            showFreeMvpInfo = true
+            onUpdateDetailsOpened()
+        }
+    }
     Scaffold { innerPadding ->
         when {
             showFreeMvpInfo -> FreeMvpInfoScreen(
+                updateState = updateState,
                 modifier = Modifier.padding(innerPadding),
                 onBack = { showFreeMvpInfo = false },
+                onDownloadUpdate = { release ->
+                    updateState = ReleaseUpdateUiState(
+                        status = ReleaseUpdateStatus.DOWNLOADING,
+                        release = release,
+                        totalBytes = release.asset.sizeBytes,
+                    )
+                    scope.launch {
+                        val outcome = withContext(Dispatchers.IO) {
+                            runCatching {
+                                releaseUpdater.downloadAndVerify(release) { downloaded, total ->
+                                    scope.launch {
+                                        updateState = updateState.copy(
+                                            status = if (downloaded == total) {
+                                                ReleaseUpdateStatus.VERIFYING
+                                            } else {
+                                                ReleaseUpdateStatus.DOWNLOADING
+                                            },
+                                            downloadedBytes = downloaded,
+                                            totalBytes = total,
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                        outcome.fold(
+                            onSuccess = { (apk, _) ->
+                                verifiedUpdateApk = apk
+                                updateState = updateState.copy(
+                                    status = ReleaseUpdateStatus.READY_TO_INSTALL,
+                                    downloadedBytes = release.asset.sizeBytes,
+                                    totalBytes = release.asset.sizeBytes,
+                                    message = "下载和安全校验已完成。",
+                                )
+                                if (releaseUpdater.canRequestPackageInstalls()) {
+                                    context.startActivity(releaseUpdater.installIntent(apk))
+                                } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                                    updateState = updateState.copy(
+                                        status = ReleaseUpdateStatus.WAITING_FOR_INSTALL_PERMISSION,
+                                        message = "请按系统提示允许此来源安装，再继续更新。",
+                                    )
+                                    context.startActivity(releaseUpdater.installPermissionIntent())
+                                }
+                            },
+                            onFailure = {
+                                verifiedUpdateApk = null
+                                updateState = updateState.copy(
+                                    status = ReleaseUpdateStatus.FAILED,
+                                    message = "更新文件下载或安全校验失败，已删除临时文件。",
+                                )
+                            },
+                        )
+                    }
+                },
+                onContinueInstall = {
+                    val apk = verifiedUpdateApk
+                    if (apk == null) {
+                        updateState = updateState.copy(
+                            status = ReleaseUpdateStatus.FAILED,
+                            message = "已验证更新文件不可用，请重新下载。",
+                        )
+                    } else if (releaseUpdater.canRequestPackageInstalls()) {
+                        updateState = updateState.copy(status = ReleaseUpdateStatus.READY_TO_INSTALL)
+                        context.startActivity(releaseUpdater.installIntent(apk))
+                    } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                        context.startActivity(releaseUpdater.installPermissionIntent())
+                    }
+                },
             )
             isScanning -> LoadingState(Modifier.padding(innerPadding))
             scanResult == null -> StartState(
+                updateAvailable = updateState.status == ReleaseUpdateStatus.UPDATE_AVAILABLE,
                 modifier = Modifier.padding(innerPadding),
                 onAbout = { showFreeMvpInfo = true },
                 onStart = {
@@ -139,6 +275,7 @@ private fun ScannerScreen(scanner: DeviceBaselineScanner) {
                 functionalValidation = functionalValidation,
                 onFunctionalValidationChange = { functionalValidation = it },
                 onAbout = { showFreeMvpInfo = true },
+                updateAvailable = updateState.status == ReleaseUpdateStatus.UPDATE_AVAILABLE,
                 preparationProgress = preparationProgress,
                 preparationResult = preparationResult,
                 onPrepareEnvironment = {
@@ -196,6 +333,7 @@ private fun ScannerScreen(scanner: DeviceBaselineScanner) {
 @Composable
 private fun StartState(
     modifier: Modifier = Modifier,
+    updateAvailable: Boolean,
     onStart: () -> Unit,
     onAbout: () -> Unit,
 ) {
@@ -224,7 +362,7 @@ private fun StartState(
             Text("开始检测")
         }
         TextButton(onClick = onAbout) {
-            Text("免费版说明")
+            Text(if (updateAvailable) "关于 / 更新  1" else "关于 / 更新")
         }
     }
 }
@@ -248,6 +386,7 @@ private fun EnvironmentReportView(
     functionalValidation: UserFunctionalValidation,
     onFunctionalValidationChange: (UserFunctionalValidation) -> Unit,
     onAbout: () -> Unit,
+    updateAvailable: Boolean,
     preparationProgress: EnvironmentPreparationProgress?,
     preparationResult: EnvironmentPreparationResult?,
     onPrepareEnvironment: () -> Unit,
@@ -274,7 +413,14 @@ private fun EnvironmentReportView(
                 ReportRow("设备", listOf(report.device.brand, report.device.model)
                     .filter { it.isNotBlank() }
                     .joinToString(" "))
-                ReportRow("系统", report.rom.displayName)
+                if (report.deviceProfile.runtimeEnvironment ==
+                    RuntimeEnvironment.THIRD_PARTY_COMPAT_RUNTIME
+                ) {
+                    ReportRow("检测到的运行环境", "HarmonyOS 兼容环境")
+                    ReportRow("手机原生系统", "未确认")
+                } else {
+                    ReportRow("系统", report.rom.displayName)
+                }
                 ReportRow("Google 环境", report.compatibilityDecision.userSummary())
             }
         }
@@ -331,7 +477,7 @@ private fun EnvironmentReportView(
                 modifier = Modifier.fillMaxWidth(),
                 onClick = onAbout,
             ) {
-                Text("查看免费版说明")
+                Text(if (updateAvailable) "关于 / 更新  1" else "关于 / 更新")
             }
         }
     }
@@ -348,9 +494,13 @@ private fun CompatibilityDecision.userSummary(): String = when (decisionStatus) 
 
 @Composable
 private fun FreeMvpInfoScreen(
+    updateState: ReleaseUpdateUiState,
     modifier: Modifier = Modifier,
     onBack: () -> Unit,
+    onDownloadUpdate: (AvailableRelease) -> Unit,
+    onContinueInstall: () -> Unit,
 ) {
+    var confirmUpdate by remember(updateState.release) { mutableStateOf(false) }
     LazyColumn(
         modifier = modifier.fillMaxSize(),
         contentPadding = PaddingValues(20.dp),
@@ -358,9 +508,19 @@ private fun FreeMvpInfoScreen(
     ) {
         item {
             Text(
-                text = "免费版说明",
+                text = "关于 / 更新",
                 style = MaterialTheme.typography.headlineSmall,
                 fontWeight = FontWeight.Bold,
+            )
+        }
+        item {
+            ReleaseUpdateCard(
+                state = updateState,
+                confirmUpdate = confirmUpdate,
+                onRequestConfirmation = { confirmUpdate = true },
+                onCancelConfirmation = { confirmUpdate = false },
+                onDownload = onDownloadUpdate,
+                onContinueInstall = onContinueInstall,
             )
         }
         item {
@@ -396,6 +556,78 @@ private fun FreeMvpInfoScreen(
                 Text("返回")
             }
         }
+    }
+}
+
+@Composable
+private fun ReleaseUpdateCard(
+    state: ReleaseUpdateUiState,
+    confirmUpdate: Boolean,
+    onRequestConfirmation: () -> Unit,
+    onCancelConfirmation: () -> Unit,
+    onDownload: (AvailableRelease) -> Unit,
+    onContinueInstall: () -> Unit,
+) {
+    val release = state.release
+    ReportSection("版本更新") {
+        when (state.status) {
+            ReleaseUpdateStatus.IDLE,
+            ReleaseUpdateStatus.CHECKING,
+            -> Text("每天最多自动检查一次 GitHub 正式版本。")
+
+            ReleaseUpdateStatus.UP_TO_DATE -> Text("当前已是最新版本。")
+            ReleaseUpdateStatus.UNAVAILABLE -> Text("暂时无法检查更新，不影响设备检测。")
+            ReleaseUpdateStatus.UPDATE_AVAILABLE -> if (release != null) {
+                Text("发现新版本 ${release.versionName}", fontWeight = FontWeight.SemiBold)
+                Text(release.title)
+                if (release.notes.isNotBlank()) {
+                    Text(release.notes, style = MaterialTheme.typography.bodySmall)
+                }
+                if (confirmUpdate) {
+                    Text("确认后将从官方 GitHub 下载，并校验文件摘要和正式签名。")
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Button(onClick = { onDownload(release) }) { Text("确认下载并更新") }
+                        TextButton(onClick = onCancelConfirmation) { Text("取消") }
+                    }
+                } else {
+                    Button(onClick = onRequestConfirmation) { Text("立即更新") }
+                }
+            }
+
+            ReleaseUpdateStatus.DOWNLOADING -> {
+                Text("正在下载新版本…")
+                val total = state.totalBytes
+                if (total != null && total > 0L) {
+                    LinearProgressIndicator(
+                        progress = { (state.downloadedBytes.toFloat() / total).coerceIn(0f, 1f) },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    Text("${state.downloadedBytes.userFileSize()} / ${total.userFileSize()}")
+                } else {
+                    LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                }
+            }
+
+            ReleaseUpdateStatus.VERIFYING -> Text("正在进行安全校验…")
+            ReleaseUpdateStatus.WAITING_FOR_INSTALL_PERMISSION -> {
+                Text(state.message ?: "请允许此来源安装后继续。")
+                Button(onClick = onContinueInstall) { Text("继续安装") }
+            }
+
+            ReleaseUpdateStatus.READY_TO_INSTALL -> {
+                Text("安全校验已通过，等待系统安装界面确认。")
+                Button(onClick = onContinueInstall) { Text("打开系统安装界面") }
+            }
+
+            ReleaseUpdateStatus.FAILED -> Text(
+                state.message ?: "更新失败，未保留未通过校验的文件。",
+                color = MaterialTheme.colorScheme.error,
+            )
+        }
+        Text(
+            "更新不是强制操作；系统桌面角标为尽力显示，可能是数字、红点或不显示。",
+            style = MaterialTheme.typography.bodySmall,
+        )
     }
 }
 

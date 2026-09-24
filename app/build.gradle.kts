@@ -33,6 +33,13 @@ check(configuredReleaseSigningFields.isEmpty() ||
     "Release signing configuration is incomplete. Configure all four RELEASE_* fields or none."
 }
 val releaseSigningConfigured = configuredReleaseSigningFields.size == releaseSigningFieldNames.size
+val githubReleaseApiUrl = providers.environmentVariable("GITHUB_RELEASE_API_URL")
+    .orElse(providers.gradleProperty("GITHUB_RELEASE_API_URL"))
+    .orElse("")
+    .get()
+val escapedGithubReleaseApiUrl = githubReleaseApiUrl
+    .replace("\\", "\\\\")
+    .replace("\"", "\\\"")
 val releaseStoreFile = releaseSigningValues["RELEASE_STORE_FILE"]
     ?.let(rootProject::file)
 if (releaseSigningConfigured) {
@@ -49,8 +56,10 @@ android {
         applicationId = "com.example.globalcompat"
         minSdk = 23
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.1.0-rc2"
+        versionCode = 2
+        versionName = "0.1.0-rc6"
+
+        buildConfigField("String", "GITHUB_RELEASE_API_URL", "\"$escapedGithubReleaseApiUrl\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -88,6 +97,7 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 }
 

@@ -34,6 +34,19 @@ After generation, place the four values in protected environment variables or th
 properties file. Never commit the keystore or properties file. Codex and other automation should
 not receive, generate, or retain the passwords.
 
+## GitHub update endpoint
+
+Release builds read the non-secret `GITHUB_RELEASE_API_URL` environment variable (or Gradle
+property) at build time. Set it to the official repository endpoint in this exact form:
+
+```text
+https://api.github.com/repos/<owner>/<repository>/releases/latest
+```
+
+If it is not configured, the app keeps all device detection features available and reports the
+update check as temporarily unavailable. The runtime rejects non-HTTPS, non-`api.github.com`, or
+non-`releases/latest` metadata endpoints.
+
 ## Verification
 
 Build and verify locally with the Android SDK tools:
