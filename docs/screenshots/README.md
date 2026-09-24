@@ -1,6 +1,6 @@
-# RC1 README screenshot plan
+# RC2 README screenshot plan
 
-截图必须来自 RC1 真机运行，不使用设计稿冒充运行结果。技术详情保持折叠，不展示构建 fingerprint、签名摘要或其他不必要的诊断值。
+截图必须来自 RC2 真机运行，不使用设计稿冒充运行结果。技术详情保持折叠，不展示构建 fingerprint、签名摘要或其他不必要的诊断值。
 
 | 文件名 | 画面 | 说明 |
 | --- | --- | --- |

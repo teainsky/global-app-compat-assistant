@@ -2,7 +2,7 @@
 
 一个免费、原生 Android 的设备环境检测与 Google 运行环境诊断工具。项目使用 Kotlin + Jetpack Compose，不依赖 GMS 才能启动。
 
-当前阶段：`0.1.0-rc1`。尚未创建正式 GitHub Release；仓库构建产物在使用项目负责人持有的发布密钥签名并完成真机冒烟前，不作为公开安装包分发。
+当前阶段：`0.1.0-rc2`。尚未创建正式 GitHub Release；仓库构建产物在使用项目负责人持有的发布密钥签名并完成真机冒烟前，不作为公开安装包分发。
 
 ## 它解决什么问题
 
@@ -45,16 +45,16 @@
 4. 只有精确匹配已签名 `DEVICE_VERIFIED` 记录的设备，才会显示配置入口。
 5. 遇到失败时按应用内“常见错误 / 恢复说明”重试或提交 Issue。
 
-## RC1 截图位置
+## RC2 截图位置
 
-以下位置将在两台目标真机完成 RC1 冒烟后替换为真实运行截图，不使用设计稿或模拟图：
+以下位置将在两台目标真机完成 RC2 冒烟后替换为真实运行截图，不使用设计稿或模拟图：
 
 1. 首屏：开始检测与免费版说明（`docs/screenshots/01-start.png`）
 2. HBN-AL80：能力标签与当前无需处理（`docs/screenshots/02-hbn-result.png`）
 3. 自检：三项确认与恢复说明（`docs/screenshots/03-self-check.png`）
 4. HarmonyOS 6.1 + 卓易通：仅诊断、无配置入口（`docs/screenshots/04-harmony61-diagnostic.png`）
 
-截图内容与隐私处理要求见 [RC1 截图计划](docs/screenshots/README.md)。
+截图内容与隐私处理要求见 [RC2 截图计划](docs/screenshots/README.md)。
 
 ## 安全边界
 
@@ -102,7 +102,8 @@
 - [正式隐私说明](PRIVACY.md)
 - [Apache License 2.0](LICENSE)
 - [第三方许可证边界](THIRD_PARTY_NOTICES.md)
-- [RC1 真机冒烟测试清单](docs/RC1-SMOKE-TEST.md)
+- [RC2 真机冒烟测试清单](docs/RC2-SMOKE-TEST.md)
+- [Release signing 配置](docs/RELEASE_SIGNING.md)
 
 ## 开发验证
 

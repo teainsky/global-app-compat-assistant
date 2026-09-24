@@ -7,3 +7,8 @@ build/
 **/build/
 *.apk
 local.properties
+*.jks
+*.keystore
+keystore.properties
+signing.properties
+local-signing.properties
