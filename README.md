@@ -2,7 +2,7 @@
 
 一个免费、原生 Android 的设备环境检测与 Google 运行环境诊断工具。项目使用 Kotlin + Jetpack Compose，不依赖 GMS 才能启动。
 
-当前阶段：`0.1.0-rc6`。尚未创建正式 GitHub Release；仓库构建产物在使用项目负责人持有的发布密钥签名并完成真机冒烟前，不作为公开安装包分发。
+当前阶段：`0.1.0` Free MVP / Early Release。正式 APK 仅使用项目负责人持有的发布密钥签名，并通过 GitHub Release 分发。
 
 ## 它解决什么问题
 

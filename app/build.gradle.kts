@@ -56,8 +56,8 @@ android {
         applicationId = "com.example.globalcompat"
         minSdk = 23
         targetSdk = 35
-        versionCode = 2
-        versionName = "0.1.0-rc6"
+        versionCode = 1
+        versionName = "0.1.0"
 
         buildConfigField("String", "GITHUB_RELEASE_API_URL", "\"$escapedGithubReleaseApiUrl\"")
 

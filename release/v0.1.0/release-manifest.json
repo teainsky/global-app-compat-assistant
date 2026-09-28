@@ -1,0 +1,8 @@
+{
+  "versionName": "0.1.0",
+  "versionCode": 1,
+  "apkFilename": "app-release.apk",
+  "apkSha256": "769e6843cf38f4e373233efba75293ac0164e59d90d10c62b02f8b130abab994",
+  "signerCertificateSha256": "14c8e6cc6806941cda9e0b48d60316e9ff8b9dfd7be98b94ed5a41ce2290231a",
+  "githubRepository": "teainsky/global-app-compat-assistant"
+}
