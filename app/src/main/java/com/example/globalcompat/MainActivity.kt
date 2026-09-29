@@ -1321,8 +1321,8 @@ private fun UserValidationSection(
     val anyFailed = validation.googleAccountLogin == UserValidationAnswer.NO ||
         validation.chatGptLoginAndUse == UserValidationAnswer.NO ||
         validation.chromeGoogleLogin == UserValidationAnswer.NO
-    ReportSection("自检") {
-        Text("请按实际使用结果选择；自检不会单独解锁配置能力。")
+    ReportSection("真实使用确认") {
+        Text("请按实际使用结果选择；用户确认不会单独解锁配置能力。")
         ValidationAnswerRow(
             label = "Google账号可以登录",
             answer = validation.googleAccountLogin,
@@ -1340,9 +1340,9 @@ private fun UserValidationSection(
         )
         Text(
             text = when {
-                allPassed -> "三项功能自检均通过。"
+                allPassed -> "三项功能均已由用户确认可用。"
                 anyFailed -> "存在未通过项目，请查看上方 Google 环境说明和恢复建议。"
-                else -> "尚有项目未测试；未测试不代表失败，也不会提升验证等级。"
+                else -> "尚有项目未测试。未测试不代表失败，也不会提升验证等级。"
             },
             style = MaterialTheme.typography.bodySmall,
         )

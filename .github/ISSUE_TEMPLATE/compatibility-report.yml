@@ -9,17 +9,24 @@ body:
       value: |
         感谢反馈。请勿填写账号、IMEI、Android ID、序列号、手机号、MAC、联系人或 SIM 标识。
   - type: input
+    id: brand
+    attributes:
+      label: 手机品牌
+      placeholder: 例如 Huawei / Samsung / Xiaomi
+    validations:
+      required: true
+  - type: input
     id: model
     attributes:
-      label: 设备型号
+      label: 手机型号
       placeholder: 例如 HBN-AL80
     validations:
       required: true
   - type: input
-    id: system
+    id: system_rom
     attributes:
-      label: 系统与版本
-      placeholder: 例如 HarmonyOS 4.2.0 / Android API 31
+      label: 系统 / ROM 版本
+      placeholder: 例如 HarmonyOS 4.2.0 / One UI 7 / HyperOS 2
     validations:
       required: true
   - type: dropdown
@@ -30,17 +37,52 @@ body:
         - 开始检测
         - 检测结果
         - Google 环境诊断
-        - 自检
+        - 真实使用确认
         - 已验证设备配置
     validations:
       required: true
   - type: textarea
-    id: result
+    id: detection_result
     attributes:
-      label: 实际结果
-      description: 请描述界面提示；技术详情可脱敏后粘贴。
+      label: 检测结果
+      description: 请描述能力标签、Google 环境说明和错误提示；技术详情可脱敏后粘贴。
     validations:
       required: true
+  - type: dropdown
+    id: google_actual
+    attributes:
+      label: Google 账号实际情况
+      options:
+        - 可以登录使用
+        - 无法登录使用
+        - 未测试
+    validations:
+      required: true
+  - type: dropdown
+    id: chatgpt_actual
+    attributes:
+      label: ChatGPT 实际情况
+      options:
+        - 可以登录使用
+        - 无法登录使用
+        - 未测试
+    validations:
+      required: true
+  - type: dropdown
+    id: chrome_actual
+    attributes:
+      label: Chrome 登录 Google 实际情况
+      options:
+        - 可以登录使用
+        - 无法登录使用
+        - 未测试
+    validations:
+      required: true
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: 错误截图（可选）
+      description: 可将已脱敏的截图拖到这里；请遮挡账号、通知、设备唯一标识和私人内容。
   - type: textarea
     id: expected
     attributes:

@@ -4,6 +4,12 @@
 
 当前阶段：`0.1.0` Free MVP / Early Release。正式 APK 仅使用项目负责人持有的发布密钥签名，并通过 GitHub Release 分发。
 
+## 设备兼容反馈 / 报告问题
+
+[提交设备兼容反馈或报告问题](https://github.com/teainsky/global-app-compat-assistant/issues/new?template=compatibility-report.yml)
+
+未验证设备欢迎反馈，但反馈入口和检测能力不代表该设备已经获得支持或可以自动配置。请勿提交账号信息、设备唯一标识或未脱敏的私人数据。
+
 ## 它解决什么问题
 
 - 识别设备、Android/HarmonyOS 分支、ROM 与核心 Google 组件状态。
@@ -41,7 +47,7 @@
 
 1. 打开应用，点击“开始检测”。
 2. 查看“可检测 / 可诊断 / 已验证可配置”能力标签。
-3. 阅读 Google 环境说明并完成三项自检。
+3. 阅读 Google 环境说明并完成三项真实使用确认。
 4. 只有精确匹配已签名 `DEVICE_VERIFIED` 记录的设备，才会显示配置入口。
 5. 遇到失败时按应用内“常见错误 / 恢复说明”重试或提交 Issue。
 
@@ -51,7 +57,7 @@
 
 1. 首屏：开始检测与免费版说明（`docs/screenshots/01-start.png`）
 2. HBN-AL80：能力标签与当前无需处理（`docs/screenshots/02-hbn-result.png`）
-3. 自检：三项确认与恢复说明（`docs/screenshots/03-self-check.png`）
+3. 真实使用确认：三项确认与恢复说明（`docs/screenshots/03-self-check.png`）
 4. HarmonyOS 6.1 + 卓易通：仅诊断、无配置入口（`docs/screenshots/04-harmony61-diagnostic.png`）
 
 截图内容与隐私处理要求见 [RC2 截图计划](docs/screenshots/README.md)。
@@ -95,7 +101,7 @@
 
 ## 反馈问题
 
-请使用 [兼容性反馈模板](.github/ISSUE_TEMPLATE/compatibility-report.yml)。不要提交账号信息、设备唯一标识或未脱敏的私人数据。
+请使用 [设备兼容反馈 / 报告问题](https://github.com/teainsky/global-app-compat-assistant/issues/new?template=compatibility-report.yml)。未验证设备欢迎反馈，但不代表已经支持。不要提交账号信息、设备唯一标识或未脱敏的私人数据。
 
 ## 隐私与许可证
 
